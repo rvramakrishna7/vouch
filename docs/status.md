@@ -7,7 +7,7 @@ Updated by the worker at the end of every task. Planner and owner read it first.
 - **Repo:** https://github.com/rvramakrishna7/vouch
 
 ## Current state
-Monorepo scaffolded and deployed on Vercel. `client/` (Vite + React + TS + Tailwind v4 + React Router) has one-click demo login, persistent session management, role routing, navigation bar, Brand Kit management, and complete content submission workflow. `server/` (Express + TS, ESM on Vercel Functions, region bom1) connects to Supabase PostgreSQL in Mumbai.
+Monorepo scaffolded and deployed on Vercel. `client/` (Vite + React + TS + Tailwind v4 + React Router) has one-click demo login, persistent session management, role routing, navigation bar, Brand Kit management, content submission workflow, and interactive Claim Ledger findings inspection. `server/` (Express + TS, ESM on Vercel Functions, region bom1) connects to Supabase PostgreSQL in Mumbai.
 
 Database schema (001_init.sql with pgvector, DEC-013 offsets, tenant isolation, audit_events append-only trigger; 002_enable_rls.sql on all tables; 003_terms_rules.sql adding rule_id and note to terms) applied to Supabase PostgreSQL. Demo brand ("Aqualeaf" and "Northwind Labs") seeded idempotently.
 
@@ -28,11 +28,11 @@ Content submission experience (S5a API & S5b UI) completed and live:
 - Client UI:
   - `/content` (Creator home): list of user's submitted content with channel, status badges, revision number, updated time, "+ New content" button, empty state ("No content yet. Create your first piece to get it reviewed.").
   - `/content/new` (Creator only): form with Title, Channel select, Audience, Purpose (with helper text), Body (live character counter), "Upload .docx" button calling extraction endpoint with size/type validation, "Use sample caption" button pre-filling the worked example, Save -> navigates to `/content/:id`.
-  - `/content/:id` (All roles): displays content metadata (channel, audience, purpose, creator, updated time), latest revision body in a clean readable box, expandable previous revisions history, disabled "Run Vouch review" button ("Coming in the next step.").
+  - `/content/:id` (All roles): displays content metadata (channel, audience, purpose, creator, updated time), latest revision body in a clean readable box, expandable previous revisions history.
   - `/reviews` (Reviewer home): organization-wide review queue showing all submitted content with status badges, linking each to `/content/:id`.
   - Role-based Navigation in Header: Creator (Content, Brand Kit), Reviewer (Reviews, Brand Kit), Brand Manager (Brand Kit, Reviews (read)).
 
-Rule-based review engine and review API (S6a) completed and live:
+Rule-based review engine and Findings UI (S6a API & S6b UI) completed and live:
 - Database: Migration `003_terms_rules.sql` added `rule_id` (FK to rules) and `note` (TEXT) to `terms`.
 - Seed: Idempotently seeded terms with exact rule links (`CLAIM-01`, `CLAIM-02`, `CLAIM-03`, `TERM-01`, `TERM-02`) and guidance notes from `docs/demo-brand.md`.
 - Pure engine (`server/src/engine/ruleChecks.ts`):
@@ -44,7 +44,15 @@ Rule-based review engine and review API (S6a) completed and live:
 - Review endpoints (`server/src/routes/contents.ts`):
   - `POST /api/contents/:id/reviews`: executes rule checks on latest revision, transactionally persists review record (`provider: "rules"`, `model: "vouch-rules-v1"`) and findings, records append-only audit event (`review.run`).
   - `GET /api/contents/:id/reviews/latest`: returns latest review and findings joined with rule code and rule text.
+- Findings UI (`client/src/pages/ContentDetailPage.tsx`):
+  - Enabled "Run Vouch review" button with progress indication ("Reviewing...") and error reporting.
+  - Auto-fetches latest review on load or displays "Not reviewed yet."
+  - Summary bar displaying severity count badges (High, Medium, Low) and engine disclosure (`Checked by: <provider> · <model> · <time>`).
+  - Interactive highlighted draft text with non-overlapping offset spans (high red, medium amber, low grey underline); clicking a highlight scrolls to and smoothly outlines the corresponding finding card.
+  - Claim Ledger finding cards list sorted by severity then position: kind badge, quoted span, citation line with rule code and rule text (or "Suggestion (no rule cited)" in grey if rule_code is null under Invariant 1), reason, confidence percentage, suggested fix if present.
+  - Responsive desktop and mobile layouts.
 - Vitest suite: 37/37 tests passing across 6 test suites.
+- Client build: `tsc -b && vite build` passing with 0 errors.
 
 Verified row counts:
 - schema_migrations: 3
@@ -70,7 +78,7 @@ Verified row counts:
 | S3 | Auth, roles, one-click demo logins | 22 Oct | Done: S3a (server auth, roles, demo login, RLS) and S3b (client login, demo buttons, app shell, role routing) |
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Done: S4a (server API live) and S4b (interactive Brand Kit UI for all roles) |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
-| S6 | Rule-based engine (terms, expired facts, readability) | 23 Oct | S6a done (migration 003, rule engine, review API live, 37 vitest tests passing) |
+| S6 | Rule-based engine (terms, expired facts, readability) | 23 Oct | Done: S6a (rule engine & review API live) and S6b (interactive findings UI on content page) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Pending |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Pending |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
@@ -80,7 +88,7 @@ Verified row counts:
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S6b / S7: Rule-based findings UI or AI adapter (Gemini + Groq fallback + zod).
+S7: AI adapter (Gemini primary + Groq fallback + zod validation) and embeddings.
 
 ## Open issues
 none
