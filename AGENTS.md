@@ -59,6 +59,14 @@ STOP and report (do not improvise) when: a precondition fails, a secret is neede
 4. **Never write names, emails, IDs, codes or numbers from memory.** Copy them from files (e.g. `docs/demo-brand.md`) or from command output. The demo users are: Priya Sharma (brand_manager), Arjun Mehta (creator), Neha Iyer (reviewer). There is no "Meera Patel".
 5. If you are not sure something works, say so. An honest "not verified" is better than a wrong PASS.
 
+## 7b. UI Definition of Done (owner's rule, mandatory, added after the S9b failure)
+S9b was reported DONE, but on the live app the buttons did not work (every finding showed "Change"; Edit and Dismiss closed immediately; Preview stayed disabled). Root cause: `resolution` defaults to "open" in the database and the UI treated "open" as resolved. A build that compiles is NOT a working feature.
+1. Every task that changes UI behaviour must add or update a **Playwright end-to-end test** in `client/e2e/` that performs the SAME clicks the owner will do, against a mocked API (`page.route`) built from the REAL API response shapes and REAL database defaults (read the migrations and route code; e.g. `resolution` = "open", `verdict` = null for rule findings).
+2. Run it headless and paste the output VERBATIM. Save a full-page screenshot per key step in `client/e2e/screenshots/` (git-ignored) and list their paths.
+3. The "Manual check" in your report must be the same steps as the e2e test, with button labels copied from the code, not from memory.
+4. A UI task is DONE only if: client build passes AND the e2e test passes. Otherwise Status = PARTIAL.
+5. Before writing UI logic that depends on a field, check its possible values in the migrations and the route that returns it. Never assume null/empty defaults.
+
 ## 8. Git rules
 - Repo root is this folder. Default branch `main`.
 - One task = one branch (`feat/...`, `fix/...`, `docs/...`, `chore/...`). Merge to `main` with `git merge --no-ff` only after the task's checks pass.
