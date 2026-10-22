@@ -6,6 +6,11 @@ import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import pool from "../db/pool.js";
+import {
+  runRuleChecks,
+  type RuleInput,
+  type TermInput,
+} from "../engine/ruleChecks.js";
 
 export const contentsRouter = Router();
 
@@ -176,6 +181,222 @@ contentsRouter.get("/", async (req: Request, res: Response) => {
     return res.json(rows);
   } catch (err) {
     console.error("GET /api/contents error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// GET /api/contents/:id/reviews/latest (any role that can see content)
+contentsRouter.get("/:id/reviews/latest", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  try {
+    // Check content access
+    const { rows: contentRows } = await pool.query<{ id: string; created_by: string }>(
+      "SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2",
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const content = contentRows[0];
+    if (req.user!.role === "creator" && content.created_by !== req.user!.id) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    // Get latest review for this content
+    const { rows: reviewRows } = await pool.query(
+      `SELECT rw.id, rw.organization_id, rw.revision_id, rw.provider, rw.model,
+              rw.started_at, rw.finished_at, rw.created_at
+       FROM reviews rw
+       JOIN revisions rv ON rw.revision_id = rv.id
+       WHERE rv.content_id = $1 AND rw.organization_id = $2
+       ORDER BY rw.created_at DESC
+       LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (reviewRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const review = reviewRows[0];
+
+    // Join findings with rule_code and rule_text
+    const { rows: findings } = await pool.query(
+      `SELECT f.id, f.organization_id, f.review_id, f.kind, f.span_text,
+              f.start_offset, f.end_offset, f.verdict, f.rule_id,
+              r.code AS rule_code, r.text AS rule_text,
+              f.reason, f.severity, f.confidence, f.suggested_fix,
+              f.resolution, f.dismiss_reason, f.created_at
+       FROM findings f
+       LEFT JOIN rules r ON f.rule_id = r.id
+       WHERE f.review_id = $1 AND f.organization_id = $2
+       ORDER BY f.start_offset ASC, f.id ASC`,
+      [review.id, orgId],
+    );
+
+    return res.json({ review, findings });
+  } catch (err) {
+    console.error("GET /api/contents/:id/reviews/latest error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// POST /api/contents/:id/reviews (any role that can see content)
+contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  try {
+    // 1. Verify content exists in org and user has access
+    const { rows: contentRows } = await pool.query<{
+      id: string;
+      created_by: string;
+    }>(
+      "SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2",
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const content = contentRows[0];
+    if (req.user!.role === "creator" && content.created_by !== req.user!.id) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    // 2. Fetch latest revision
+    const { rows: revisionRows } = await pool.query<{
+      id: string;
+      n: number;
+      body: string;
+    }>(
+      `SELECT id, n, body
+       FROM revisions
+       WHERE content_id = $1 AND organization_id = $2
+       ORDER BY n DESC
+       LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (revisionRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const latestRevision = revisionRows[0];
+
+    // 3. Fetch rules and terms for this organization
+    const { rows: rules } = await pool.query<RuleInput>(
+      `SELECT id, code, category, severity, text, status
+       FROM rules
+       WHERE organization_id = $1`,
+      [orgId],
+    );
+
+    const { rows: terms } = await pool.query<TermInput>(
+      `SELECT t.id, t.term, t.type, t.replacement, t.rule_id, r.code AS rule_code, t.note
+       FROM terms t
+       LEFT JOIN rules r ON t.rule_id = r.id
+       WHERE t.organization_id = $1`,
+      [orgId],
+    );
+
+    // Map rule_code -> rule_id
+    const ruleCodeToId = new Map(rules.map((r) => [r.code, r.id]));
+
+    // 4. Run pure rule checks
+    const computedFindings = runRuleChecks(latestRevision.body, { rules, terms });
+
+    // 5. In one transaction: save review, findings, and audit log
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: reviewRows } = await client.query(
+        `INSERT INTO reviews (organization_id, revision_id, provider, model, started_at, finished_at)
+         VALUES ($1, $2, 'rules', 'vouch-rules-v1', now(), now())
+         RETURNING id, organization_id, revision_id, provider, model, started_at, finished_at, created_at`,
+        [orgId, latestRevision.id],
+      );
+      const review = reviewRows[0];
+
+      for (const f of computedFindings) {
+        const resolvedRuleId = f.rule_code
+          ? (ruleCodeToId.get(f.rule_code) ?? null)
+          : null;
+
+        await client.query(
+          `INSERT INTO findings (
+             organization_id, review_id, kind, span_text, start_offset, end_offset,
+             verdict, rule_id, reason, severity, confidence, suggested_fix
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11)`,
+          [
+            orgId,
+            review.id,
+            f.kind,
+            f.span_text,
+            f.start_offset,
+            f.end_offset,
+            resolvedRuleId,
+            f.reason,
+            f.severity,
+            f.confidence,
+            f.suggested_fix,
+          ],
+        );
+      }
+
+      await logAudit({
+        organizationId: orgId,
+        actor: req.user!.id,
+        action: "review.run",
+        entity: `review:${review.id}`,
+        payload: {
+          content_id: content.id,
+          revision_id: latestRevision.id,
+          findings_count: computedFindings.length,
+        },
+        client,
+      });
+
+      await client.query("COMMIT");
+
+      // Query findings joined with rules table for response
+      const { rows: findings } = await pool.query(
+        `SELECT f.id, f.organization_id, f.review_id, f.kind, f.span_text,
+                f.start_offset, f.end_offset, f.verdict, f.rule_id,
+                r.code AS rule_code, r.text AS rule_text,
+                f.reason, f.severity, f.confidence, f.suggested_fix,
+                f.resolution, f.dismiss_reason, f.created_at
+         FROM findings f
+         LEFT JOIN rules r ON f.rule_id = r.id
+         WHERE f.review_id = $1 AND f.organization_id = $2
+         ORDER BY f.start_offset ASC, f.id ASC`,
+        [review.id, orgId],
+      );
+
+      return res.status(201).json({ review, findings });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("POST /api/contents/:id/reviews error:", err);
     return res.status(500).json({ error: "internal_error" });
   }
 });

@@ -39,17 +39,19 @@ Fictional Indian D2C brand of steel water bottles.
 | F-09 | Aqualeaf gives 10% of profits to river clean-up projects. | Partnership letter | 2026-03-31 (EXPIRED) |
 
 ### Terms
-| Term | Type | Replacement / note |
-|---|---|---|
-| No.1 | banned | Remove, or cite an approved ranking fact (CLAIM-01) |
-| best in India | banned | Remove (CLAIM-01) |
-| 100% natural | banned | Remove (not applicable to steel products) |
-| guaranteed | banned | "tested" |
-| chemical-free | banned | Name the specific attribute, e.g. "BPA-free lid" (F-20) |
-| eco-friendly | regulated | Allowed only with a specific supporting fact (CLAIM-02) |
-| sustainable | regulated | Allowed only with a specific supporting fact (CLAIM-02) |
-| metal flask | banned | "steel bottle" (TERM-02) |
-| Aqualeaf | preferred | Exact spelling (TERM-01) |
+Each term may cite a rule (rule_code). A term finding with no rule_code is shown only as a suggestion (invariant 1). `replacement` is literal text that can be swapped in; `note` is guidance for the creator.
+
+| Term | Type | Rule code | Replacement | Note |
+|---|---|---|---|---|
+| No.1 | banned | CLAIM-01 | (none) | Remove, or cite an approved ranking fact |
+| best in India | banned | CLAIM-01 | (none) | Remove; superlatives need a ranking fact |
+| 100% natural | banned | CLAIM-02 | (none) | Not applicable to steel products |
+| guaranteed | banned | CLAIM-03 | tested | Avoid absolute promises |
+| chemical-free | banned | CLAIM-02 | BPA-free lid | Name the specific attribute (F-20) |
+| eco-friendly | regulated | CLAIM-02 | (none) | Allowed only with a specific supporting fact |
+| sustainable | regulated | CLAIM-02 | (none) | Allowed only with a specific supporting fact |
+| metal flask | banned | TERM-02 | steel bottle | Use the brand's product term |
+| Aqualeaf | preferred | TERM-01 | Aqualeaf | Exact spelling; flag variants like "AquaLeaf" or "Aqua Leaf" |
 
 ### Seed content (draft by Arjun Mehta, not yet reviewed)
 - Title: Instagram caption: Flow launch
