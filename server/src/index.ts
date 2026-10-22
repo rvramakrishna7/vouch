@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import authRouter from "./routes/auth.js";
 
 const app = express();
 
@@ -24,6 +25,9 @@ app.use(express.json({ limit: "4mb" }));
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "vouch-server", time: new Date().toISOString() });
 });
+
+// Auth routes
+app.use("/api/auth", authRouter);
 
 // Unknown routes
 app.use((_req: Request, res: Response) => {
