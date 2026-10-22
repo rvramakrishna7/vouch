@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -47,6 +47,24 @@ function createFinding(
   };
 }
 
+async function assertCleanText(page: Page) {
+  const text = await page.innerText("body");
+  const entityMatch = text.match(/&[a-zA-Z]+;/);
+  expect(
+    entityMatch,
+    `Page text should not contain unescaped HTML entities, found: ${entityMatch?.[0]}`,
+  ).toBeNull();
+
+  const forbiddenWords = ["checked", "check_circle", "close", "arrow_forward"];
+  for (const word of forbiddenWords) {
+    const regex = new RegExp(`\\b${word}\\b`, "i");
+    expect(
+      regex.test(text),
+      `Page text should not contain icon name "${word}" as visible word`,
+    ).toBe(false);
+  }
+}
+
 test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
   const screenshotsDir = path.join(process.cwd(), "e2e", "screenshots");
 
@@ -56,7 +74,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
     }
   });
 
-  test("Checks 1-7: Creator resolution flow on mocked API", async ({ page }) => {
+  test("Checks 1-7 + Revision 2 Stale Review Flow on mocked API", async ({ page }) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (err) => pageErrors.push(err.message));
 
@@ -212,6 +230,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
       }
 
       if (url.endsWith("/api/contents/c1/revisions") && method === "POST") {
+        const body = JSON.parse(request.postData() || "{}");
         const newBody = BODY.replace(
           "Keeps drinks cold for 48 hours",
           "Keeps drinks cold for 24 hours",
@@ -219,11 +238,35 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
           "India's No.1 eco-friendly water bottle",
           "A water bottle made from 70% recycled stainless steel",
         );
-        return jsonFulfill({
-          body: newBody,
-          applied: ["f48", "fno1"],
-          skipped: [],
-        });
+
+        if (body.mode === "preview") {
+          return jsonFulfill({
+            body: newBody,
+            applied: ["f48", "fno1"],
+            skipped: [],
+          });
+        }
+
+        if (body.mode === "apply_fixes") {
+          const rev2 = {
+            id: "rev2",
+            n: 2,
+            body: newBody,
+            created_by: "u1",
+            created_by_name: "Arjun Mehta",
+            created_at: "2026-10-22T10:05:00Z",
+          };
+          content.revisions = [rev2, ...content.revisions];
+          content.updated_at = "2026-10-22T10:05:00Z";
+          return jsonFulfill(
+            {
+              revision: rev2,
+              applied: ["f48", "fno1"],
+              skipped: [],
+            },
+            201,
+          );
+        }
       }
 
       return jsonFulfill({ error: "not_mocked", url }, 404);
@@ -248,6 +291,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
     await expect(acceptFixBtn.first()).toBeVisible();
     const changeBtn = page.getByRole("button", { name: "Change", exact: true });
     await expect(changeBtn).toHaveCount(0);
+    await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "check1_initial.png"),
       fullPage: true,
@@ -257,6 +301,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
     await acceptFixBtn.first().click();
     const acceptedBadge = page.getByText(/Accepted/);
     await expect(acceptedBadge.first()).toBeVisible();
+    await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "check2_accepted.png"),
       fullPage: true,
@@ -279,6 +324,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
 
     const editedBadge = page.getByText(/Edited:/);
     await expect(editedBadge.first()).toBeVisible();
+    await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "check3_edited.png"),
       fullPage: true,
@@ -304,6 +350,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
 
     const dismissedBadge = page.getByText(/Dismissed:/);
     await expect(dismissedBadge.first()).toBeVisible();
+    await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "check4_dismissed.png"),
       fullPage: true,
@@ -316,6 +363,7 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
 
     const previewModal = page.locator(".fixed");
     await expect(previewModal.getByText("24 hours")).toBeVisible();
+    await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "check5_preview.png"),
       fullPage: true,
@@ -329,7 +377,6 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
     expect(pageErrors).toEqual([]);
 
     // Check 7: Supported claim (claim 3 "40% lighter") shows no action buttons
-    // Finding card for fsup should not contain Accept fix, Edit, or Dismiss
     const fsupCard = page.locator("#finding-card-fsup");
     await expect(fsupCard).toBeVisible();
     await expect(fsupCard.getByRole("button", { name: "Accept fix", exact: true })).toHaveCount(0);
@@ -340,9 +387,39 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
       path: path.join(screenshotsDir, "check7_supported.png"),
       fullPage: true,
     });
+
+    // Check 8 (Task S9c): Click "Create revision 2" -> revision 2 created
+    // Latest revision is now rev2, but latest review is on rev1.
+    const createRevBtn = previewModal.getByRole("button", { name: /Create revision/ });
+    await createRevBtn.click();
+    await page.waitForLoadState("networkidle");
+
+    // Banner screenshot
+    await page.screenshot({
+      path: path.join(screenshotsDir, "revision2_created_banner.png"),
+      fullPage: true,
+    });
+
+    // Verify clean text on the newly updated page
+    await assertCleanText(page);
+
+    // Stale notice screenshot
+    await page.screenshot({
+      path: path.join(screenshotsDir, "stale_review_notice.png"),
+      fullPage: true,
+    });
+
+    // Notice containing "Revision 1" and "Run Vouch review" must be visible
+    const staleNotice = page.locator("body");
+    await expect(staleNotice.getByText(/These findings are for Revision 1/i)).toBeVisible();
+    await expect(staleNotice.getByText(/Run Vouch review/i).first()).toBeVisible();
+
+    // In Draft Body: assert NO highlight spans (buttons) inside the Draft Body
+    const draftCard = page.locator(".space-y-4:has(h2:has-text('Draft Body')) div.bg-white");
+    await expect(draftCard.locator("button")).toHaveCount(0);
   });
 
-  test("Check 8: Reviewer logged in sees no Accept/Edit/Dismiss/Change buttons", async ({ page }) => {
+  test("Check 9: Reviewer logged in sees no Accept/Edit/Dismiss/Change buttons", async ({ page }) => {
     const reviewerUser = {
       id: "u2",
       name: "Neha Iyer",
@@ -461,6 +538,8 @@ test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
 
     await page.goto("/content/c1");
     await page.waitForLoadState("networkidle");
+
+    await assertCleanText(page);
 
     // Assert: zero Accept fix, Edit, Dismiss, Change buttons anywhere
     await expect(page.getByRole("button", { name: "Accept fix", exact: true })).toHaveCount(0);

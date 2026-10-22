@@ -550,7 +550,7 @@ export function ContentDetailPage() {
           to={backLink}
           className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1"
         >
-          &larr; Back to {backLabel}
+          ← Back to {backLabel}
         </Link>
         <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-red-700">
           <h2 className="text-base font-semibold">Error Loading Content</h2>
@@ -570,6 +570,10 @@ export function ContentDetailPage() {
 
   const latestRevision = content?.revisions?.[0];
   const nextRevisionN = (latestRevision?.n ?? 0) + 1;
+  const reviewedRevision = content?.revisions?.find(
+    (r) => r.id === review?.revision_id,
+  );
+  const reviewedRevN = reviewedRevision?.n ?? 1;
 
   // Group findings into claims vs rule-based findings
   const claimFindings = findings.filter((f) => f.kind === "claim");
@@ -582,12 +586,15 @@ export function ContentDetailPage() {
   const unsupportedCount = claimFindings.filter((f) => f.verdict === "unsupported").length;
   const needsHumanCount = claimFindings.filter((f) => f.verdict === "needs_human_judgement").length;
 
-  // Permissions check
-  const isCreatorOwner = Boolean(
-    user?.role === "creator" && content && user?.id === content.created_by,
-  );
+  // Permissions & Review Stale checks
   const isLatestReview = Boolean(
     review && latestRevision && review.revision_id === latestRevision.id,
+  );
+  const isStaleReview = Boolean(
+    review && latestRevision && review.revision_id !== latestRevision.id,
+  );
+  const isCreatorOwner = Boolean(
+    user?.role === "creator" && content && user?.id === content.created_by,
   );
   const canResolve = Boolean(isCreatorOwner && isLatestReview && !staleReviewAlert);
 
@@ -601,12 +608,12 @@ export function ContentDetailPage() {
   );
   const readyCount = readyFindings.length;
 
-  // Build highlighted text segments
+  // Build highlighted text segments (only when review is for the latest revision)
   const renderHighlightedBody = () => {
     if (!latestRevision) return null;
     const bodyText = latestRevision.body;
 
-    if (findings.length === 0) {
+    if (!isLatestReview || findings.length === 0) {
       return (
         <div className="text-slate-800 text-base leading-relaxed whitespace-pre-wrap font-sans">
           {bodyText}
@@ -730,13 +737,13 @@ export function ContentDetailPage() {
       if (finding.resolution === "accepted" || finding.resolution === "accept") {
         badge = (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            &check; Accepted
+            ✓ Accepted
           </span>
         );
       } else if (finding.resolution === "edited" || finding.resolution === "edit") {
         badge = (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300 max-w-full truncate">
-            &#9998; Edited: "{finding.replacement_text || finding.suggested_fix}"
+            ✎ Edited: "{finding.replacement_text || finding.suggested_fix}"
           </span>
         );
       } else if (
@@ -745,7 +752,7 @@ export function ContentDetailPage() {
       ) {
         badge = (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 max-w-full truncate">
-            &times; Dismissed: "{finding.dismiss_reason}"
+            × Dismissed: "{finding.dismiss_reason}"
           </span>
         );
       }
@@ -903,7 +910,7 @@ export function ContentDetailPage() {
             to={backLink}
             className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 mb-2"
           >
-            &larr; Back to {backLabel}
+            ← Back to {backLabel}
           </Link>
           <div className="flex items-center gap-3">
             {loading ? (
@@ -961,7 +968,7 @@ export function ContentDetailPage() {
             <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
             <span className="font-semibold">Review running ({elapsedSeconds}s):</span>
             <span className="text-xs text-blue-800 font-medium">
-              Checking rules &rarr; Finding relevant facts &rarr; Verifying claims
+              Checking rules → Finding relevant facts → Verifying claims
             </span>
           </div>
           <span className="text-xs text-blue-600 font-mono">Keep page open</span>
@@ -972,8 +979,10 @@ export function ContentDetailPage() {
       {createdRevisionBanner && (
         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-sm text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-              &check;
+            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             </span>
             <span className="font-semibold">
               Revision {createdRevisionBanner.n} created. Run Vouch review again to check the new text.
@@ -988,13 +997,13 @@ export function ContentDetailPage() {
             disabled={reviewRunning}
             className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
           >
-            Run review &rarr;
+            Run review →
           </button>
         </div>
       )}
 
-      {/* Stale Review 409 Banner (Requirement 8) */}
-      {staleReviewAlert && (
+      {/* Stale Review Notice (when review is for an older revision) */}
+      {(isStaleReview || staleReviewAlert) && latestRevision && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2.5">
             <svg
@@ -1011,7 +1020,7 @@ export function ContentDetailPage() {
               />
             </svg>
             <span className="font-semibold">
-              This review is for an older revision. Run a new review first.
+              These findings are for Revision {reviewedRevN}. Run Vouch review to check Revision {latestRevision.n}.
             </span>
           </div>
           <button
@@ -1020,7 +1029,7 @@ export function ContentDetailPage() {
             disabled={reviewRunning}
             className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
           >
-            Run new review &rarr;
+            Run Vouch review →
           </button>
         </div>
       )}
@@ -1188,7 +1197,7 @@ export function ContentDetailPage() {
 
             {/* AI and Engine Disclosure Line */}
             <div className="text-xs text-slate-500 font-medium">
-              Checked by:{" "}
+              Reviewed by:{" "}
               <span className="text-slate-800 font-semibold">
                 rule engine vouch-rules-v1
               </span>
@@ -1198,11 +1207,11 @@ export function ContentDetailPage() {
                   <span className="text-slate-800 font-semibold">
                     {review.ai_provider}
                   </span>{" "}
-                  &bull;{" "}
+                  •{" "}
                   <span className="text-slate-800 font-mono">
                     {review.ai_model}
                   </span>{" "}
-                  &bull;{" "}
+                  •{" "}
                   <span>
                     {(Number(review.ai_latency_ms || 0) / 1000).toFixed(1)} s
                   </span>
@@ -1224,7 +1233,7 @@ export function ContentDetailPage() {
               onClick={handleRunReview}
               className="text-xs font-semibold text-slate-900 underline hover:text-blue-600 cursor-pointer"
             >
-              Run review now &rarr;
+              Run review now →
             </button>
           </div>
         )}
@@ -1271,7 +1280,7 @@ export function ContentDetailPage() {
                 <span>
                   Author: {latestRevision?.created_by_name || "Unknown"}
                 </span>
-                {findings.length > 0 && (
+                {findings.length > 0 && isLatestReview && (
                   <span className="italic text-slate-500">
                     Tip: Click highlighted text to inspect evidence.
                   </span>
@@ -1338,7 +1347,7 @@ export function ContentDetailPage() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-slate-500">
                           <span>{rev.created_by_name || "Unknown"}</span>
-                          <span>&bull;</span>
+                          <span>•</span>
                           <span>
                             {new Date(rev.created_at).toLocaleDateString(undefined, {
                               month: "short",
@@ -1455,7 +1464,7 @@ export function ContentDetailPage() {
                       <span>Previewing...</span>
                     </>
                   ) : (
-                    <span>Preview changes &rarr;</span>
+                    <span>Preview changes →</span>
                   )}
                 </button>
               </div>
@@ -1471,6 +1480,11 @@ export function ContentDetailPage() {
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white">
                     {claimFindings.length}
                   </span>
+                  {isStaleReview && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                      From Revision {reviewedRevN}
+                    </span>
+                  )}
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Verified claims with exact factual evidence and guidelines citations.
@@ -1479,7 +1493,7 @@ export function ContentDetailPage() {
 
               {supportedCount > 0 && (
                 <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
-                  &check; {supportedCount} supported as proof
+                  ✓ {supportedCount} supported as proof
                 </span>
               )}
             </div>
@@ -1645,6 +1659,11 @@ export function ContentDetailPage() {
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
                     {ruleFindings.length}
                   </span>
+                  {isStaleReview && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                      From Revision {reviewedRevN}
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500">
                   Terminology, tone of voice, and accessibility checks.
@@ -1769,7 +1788,7 @@ export function ContentDetailPage() {
                 onClick={() => setPreviewModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
               >
-                &times;
+                ×
               </button>
             </div>
 
@@ -1851,7 +1870,7 @@ export function ContentDetailPage() {
                 onClick={() => setManualModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
               >
-                &times;
+                ×
               </button>
             </div>
 

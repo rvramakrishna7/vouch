@@ -44,7 +44,7 @@ export function NewContentPage() {
             to="/reviews"
             className="text-sm font-semibold text-amber-900 underline hover:text-amber-950"
           >
-            Go to Reviews &rarr;
+            Go to Reviews →
           </Link>
         </div>
       </div>
@@ -164,7 +164,7 @@ export function NewContentPage() {
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
             <Link to="/content" className="hover:text-slate-900 transition-colors">
-              &larr; Back to Content
+              ← Back to Content
             </Link>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
