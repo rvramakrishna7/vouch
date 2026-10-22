@@ -78,7 +78,17 @@ AI adapter and Fact Embeddings (S7) completed and live:
 - AI Status API (`GET /api/ai/status`):
   - Secured with `requireAuth`. Verified live returning `{gemini: {ok: true, model: "gemini-3.5-flash"}, groq: {ok: true, model: "openai/gpt-oss-120b"}, embeddings: {ok: true, model: "gemini-embedding-001", dims: 768}}`.
 
-Claim Ledger pipeline (S8a, S8a.1 & S8a.2) completed and live:
+Claim Ledger pipeline and UI (S8a, S8a.1, S8a.2, S8b) completed and live:
+- Claim Ledger UI (S8b, `client/src/pages/ContentDetailPage.tsx`):
+  - Claim Ledger section rendered on `/content/:id` above rule findings.
+  - Verdict chips with color coding: Supported (green), Outdated (amber), Contradicted (red), Unsupported (red), Needs human judgement (purple).
+  - Evidence line on each claim: "Fact F-xx: <statement> (valid until <date>)" or "Rule CLAIM-xx: <text>", plus suggested fix if any.
+  - Supported claims marked with "Proof" badge and not counted as issues.
+  - Summary bar displays broken-down claim counts ("Claims: w supported · x outdated · y contradicted · z unsupported") + "Rule findings: n", and disclosure line: "Checked by: rule engine vouch-rules-v1 + AI <ai_provider> · <ai_model> · <latency> s".
+  - Amber banner displayed when `ai_status !== "ok"`: "AI check unavailable right now. Rule-based findings are shown; try again in a minute." with rule findings displayed.
+  - Active review progress line with live elapsed seconds and "Checking rules → Finding relevant facts → Verifying claims" with disabled button and spinner.
+  - Plain-language verdict legend placed beneath the ledger table.
+  - Highlighted text overlay colors claim spans by verdict and clicking scrolls smoothly to the ledger row.
 - Stability & Deterministic Verification (S8a.2, DEC-022 Accepted, owner):
   - Model configuration for ledger call: Groq (`openai/gpt-oss-120b`, `temperature: 0`) set as primary provider with Gemini fallback (8000ms timeout) via `LEDGER_PRIMARY_PROVIDER` (default "groq").
   - Groq 429 resilience: if response header `retry-after` is <= 5s, waits and retries once on Groq before falling back.
@@ -158,7 +168,7 @@ Verified row counts:
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
-| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency & stability | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022) |
+| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
@@ -166,7 +176,7 @@ Verified row counts:
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S8b / S9: Findings UI updates for Claim Ledger findings, fact cards, and fix acceptance flow.
+S9: Findings UI, fixes (accept/edit/dismiss), revisions + diff.
 
 ## Open issues
 none
