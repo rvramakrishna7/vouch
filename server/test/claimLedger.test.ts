@@ -63,7 +63,8 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: "CLAIM-01",
           reason: "Superlative ranking without approved fact",
           confidence: 0.95,
-          suggested_fix: null,
+          replacement: null,
+          guidance: null,
         },
         {
           quote: "eco-friendly",
@@ -73,7 +74,8 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: "CLAIM-02",
           reason: "Environmental claim without specific supporting fact",
           confidence: 0.9,
-          suggested_fix: null,
+          replacement: null,
+          guidance: null,
         },
         {
           quote: "40% lighter",
@@ -83,7 +85,8 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Backed by F-12 lab test",
           confidence: 0.95,
-          suggested_fix: null,
+          replacement: null,
+          guidance: null,
         },
         {
           quote: "Rated 4.8",
@@ -93,7 +96,8 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Rating fact is expired",
           confidence: 0.9,
-          suggested_fix: null,
+          replacement: null,
+          guidance: null,
         },
         {
           quote: "cold for 48 hours",
@@ -103,7 +107,8 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "F-15 guarantees 24 hours, not 48",
           confidence: 0.95,
-          suggested_fix: "Keeps drinks cold for 24 hours",
+          replacement: "Keeps drinks cold for 24 hours",
+          guidance: "Adjust the duration to match fact F-15.",
         },
       ],
     };
@@ -185,7 +190,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Cites unknown fact",
           confidence: 0.8,
-          suggested_fix: null,
+          replacement: null,
         },
         // 2. quote not in text -> needs_human_judgement
         {
@@ -195,7 +200,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Quote not found",
           confidence: 0.8,
-          suggested_fix: null,
+          replacement: null,
         },
         // 3. model says supported citing expired F-03 -> code overrides to outdated
         {
@@ -205,7 +210,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Model thought F-03 was active",
           confidence: 0.8,
-          suggested_fix: null,
+          replacement: null,
         },
         // 4. model says outdated citing active F-12 -> needs_human_judgement
         {
@@ -216,7 +221,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Model falsely claimed active F-12 is outdated",
           confidence: 0.8,
-          suggested_fix: null,
+          replacement: null,
         },
         // 5. unsupported with invalid rule -> rule_code becomes null (suggestion only)
         {
@@ -226,7 +231,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: "NONEXISTENT-RULE",
           reason: "Rule does not exist",
           confidence: 0.8,
-          suggested_fix: null,
+          replacement: null,
         },
       ],
     };
@@ -305,7 +310,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "Environmental claim backed by recycled stainless steel",
           confidence: 0.9,
-          suggested_fix: null,
+          replacement: null,
         },
       ],
     };
@@ -377,7 +382,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: "CLAIM-03",
           reason: "Model thought no fact existed",
           confidence: 0.9,
-          suggested_fix: null,
+          replacement: null,
         },
         // 2. Model says supported for "40% lighter" and fact has 40% -> unchanged
         {
@@ -388,7 +393,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: null,
           reason: "40% matches fact F-12",
           confidence: 0.95,
-          suggested_fix: null,
+          replacement: null,
         },
         // 3. No shared unit -> unchanged
         {
@@ -399,7 +404,7 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
           rule_code: "CLAIM-01",
           reason: "Superlative ranking",
           confidence: 0.9,
-          suggested_fix: null,
+          replacement: null,
         },
       ],
     };
