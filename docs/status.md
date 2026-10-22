@@ -32,7 +32,7 @@ Content submission experience (S5a API & S5b UI) completed and live:
   - `/reviews` (Reviewer home): organization-wide review queue showing all submitted content with status badges, linking each to `/content/:id`.
   - Role-based Navigation in Header: Creator (Content, Brand Kit), Reviewer (Reviews, Brand Kit), Brand Manager (Brand Kit, Reviews (read)).
 
-Rule-based review engine and Findings UI (S6a API & S6b UI) completed and live:
+Rule-based review engine, Findings UI, and Performance optimization (S6a, S6b, S6c) completed and live:
 - Database: Migration `003_terms_rules.sql` added `rule_id` (FK to rules) and `note` (TEXT) to `terms`.
 - Seed: Idempotently seeded terms with exact rule links (`CLAIM-01`, `CLAIM-02`, `CLAIM-03`, `TERM-01`, `TERM-02`) and guidance notes from `docs/demo-brand.md`.
 - Pure engine (`server/src/engine/ruleChecks.ts`):
@@ -42,15 +42,26 @@ Rule-based review engine and Findings UI (S6a API & S6b UI) completed and live:
   - ACC-02: flags lowercase hashtags of 10+ letters with CamelCase recommendation and 0.6 confidence.
   - Enforces Invariant 1: cites active rules with their severity; missing/archived rules become suggestions without citations.
 - Review endpoints (`server/src/routes/contents.ts`):
-  - `POST /api/contents/:id/reviews`: executes rule checks on latest revision, transactionally persists review record (`provider: "rules"`, `model: "vouch-rules-v1"`) and findings, records append-only audit event (`review.run`).
-  - `GET /api/contents/:id/reviews/latest`: returns latest review and findings joined with rule code and rule text.
+  - `POST /api/contents/:id/reviews`: executes rule checks on latest revision, transactionally persists review record (`provider: "rules"`, `model: "vouch-rules-v1"`) and batch-inserts findings in 1 query, records append-only audit event (`review.run`).
+  - `GET /api/contents/:id/reviews/latest`: single-round-trip query with `json_build_object` and `json_agg` returning latest review and findings joined with rule code and rule text.
 - Findings UI (`client/src/pages/ContentDetailPage.tsx`):
   - Enabled "Run Vouch review" button with progress indication ("Reviewing...") and error reporting.
-  - Auto-fetches latest review on load or displays "Not reviewed yet."
+  - Parallel data fetching (`Promise.all` for content and review) with instant skeleton loading state (no blank screens).
+  - Synchronous session cache in `sessionStorage` (`vouch_user`, `vouch_org`) removing root auth blocking spinner.
   - Summary bar displaying severity count badges (High, Medium, Low) and engine disclosure (`Checked by: <provider> · <model> · <time>`).
   - Interactive highlighted draft text with non-overlapping offset spans (high red, medium amber, low grey underline); clicking a highlight scrolls to and smoothly outlines the corresponding finding card.
   - Claim Ledger finding cards list sorted by severity then position: kind badge, quoted span, citation line with rule code and rule text (or "Suggestion (no rule cited)" in grey if rule_code is null under Invariant 1), reason, confidence percentage, suggested fix if present.
   - Responsive desktop and mobile layouts.
+- Performance optimization (S6c):
+  - Added `@vercel/functions` database pool lifecycle attachment for Vercel Fluid Compute.
+  - Added `Server-Timing: db;dur=..., total;dur=...` middleware across all routes.
+  - Live benchmark results (warm data loads in ~80-120ms):
+    - `GET /api/health`: 0.094s / 0.094s / 0.076s (was ~0.22s)
+    - `GET /api/auth/me`: 0.141s / 0.191s / 0.138s (was ~0.21s)
+    - `GET /api/contents`: 0.122s / 0.190s / 0.169s (was ~0.21s)
+    - `GET /api/contents/:id`: 0.123s / 0.084s / 0.082s (was ~0.23s)
+    - `GET /api/contents/:id/reviews/latest`: 0.095s / 0.114s / 0.091s (was ~0.23s)
+    - `POST /api/contents/:id/reviews`: 0.123s / 0.102s / 0.108s (was ~0.28s)
 - Vitest suite: 37/37 tests passing across 6 test suites.
 - Client build: `tsc -b && vite build` passing with 0 errors.
 
@@ -78,7 +89,7 @@ Verified row counts:
 | S3 | Auth, roles, one-click demo logins | 22 Oct | Done: S3a (server auth, roles, demo login, RLS) and S3b (client login, demo buttons, app shell, role routing) |
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Done: S4a (server API live) and S4b (interactive Brand Kit UI for all roles) |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
-| S6 | Rule-based engine (terms, expired facts, readability) | 23 Oct | Done: S6a (rule engine & review API live) and S6b (interactive findings UI on content page) |
+| S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Pending |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Pending |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
