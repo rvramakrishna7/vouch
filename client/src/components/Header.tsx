@@ -43,6 +43,36 @@ export function Header() {
         : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
     }`;
 
+  // Nav configuration per role (Requirement 6):
+  // Creator: Content, Brand Kit
+  // Reviewer: Reviews, Brand Kit
+  // Brand Manager: Brand Kit, Reviews (read)
+  const navLinks = (() => {
+    if (user.role === "creator") {
+      return [
+        { to: "/content", label: "Content" },
+        { to: "/brand-kit", label: "Brand Kit" },
+      ];
+    }
+    if (user.role === "reviewer") {
+      return [
+        { to: "/reviews", label: "Reviews" },
+        { to: "/brand-kit", label: "Brand Kit" },
+      ];
+    }
+    if (user.role === "brand_manager") {
+      return [
+        { to: "/brand-kit", label: "Brand Kit" },
+        { to: "/reviews", label: "Reviews (read)" },
+      ];
+    }
+    return [
+      { to: "/content", label: "Content" },
+      { to: "/reviews", label: "Reviews" },
+      { to: "/brand-kit", label: "Brand Kit" },
+    ];
+  })();
+
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -62,15 +92,11 @@ export function Header() {
           </div>
 
           <nav className="flex items-center gap-1.5">
-            <NavLink to="/content" className={navLinkClass}>
-              Content
-            </NavLink>
-            <NavLink to="/reviews" className={navLinkClass}>
-              Reviews
-            </NavLink>
-            <NavLink to="/brand-kit" className={navLinkClass}>
-              Brand Kit
-            </NavLink>
+            {navLinks.map((link) => (
+              <NavLink key={link.to} to={link.to} className={navLinkClass}>
+                {link.label}
+              </NavLink>
+            ))}
           </nav>
         </div>
 
@@ -88,22 +114,20 @@ export function Header() {
 
           <div className="h-4 w-px bg-slate-200" />
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSwitchRole}
-              className="text-sm text-slate-600 hover:text-slate-900 font-medium px-2 py-1 rounded hover:bg-slate-100 transition-colors"
-            >
-              Switch role
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="text-sm text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-            >
-              Log out
-            </button>
-          </div>
+          <button
+            onClick={handleSwitchRole}
+            type="button"
+            className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
+          >
+            Switch role
+          </button>
+          <button
+            onClick={handleLogout}
+            type="button"
+            className="text-xs font-medium text-red-600 hover:text-red-700 cursor-pointer"
+          >
+            Sign out
+          </button>
         </div>
       </div>
     </header>

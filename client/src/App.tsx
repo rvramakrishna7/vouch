@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./auth/AuthContext.js";
 import { ProtectedLayout, getRoleHome } from "./components/ProtectedLayout.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { ContentPage } from "./pages/ContentPage.js";
+import { NewContentPage } from "./pages/NewContentPage.js";
+import { ContentDetailPage } from "./pages/ContentDetailPage.js";
 import { ReviewsPage } from "./pages/ReviewsPage.js";
 import { BrandKitPage } from "./pages/BrandKitPage.js";
 
@@ -32,6 +34,8 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/content" element={<ContentPage />} />
+            <Route path="/content/new" element={<NewContentPage />} />
+            <Route path="/content/:id" element={<ContentDetailPage />} />
             <Route path="/reviews" element={<ReviewsPage />} />
             <Route path="/brand-kit" element={<BrandKitPage />} />
           </Route>
