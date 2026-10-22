@@ -6,6 +6,7 @@ import contentsRouter from "./routes/contents.js";
 import factsRouter from "./routes/facts.js";
 import rulesRouter from "./routes/rules.js";
 import termsRouter from "./routes/terms.js";
+import { aiRouter } from "./routes/ai.js";
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use("/api/contents", contentsRouter);
 app.use("/api/rules", rulesRouter);
 app.use("/api/facts", factsRouter);
 app.use("/api/terms", termsRouter);
+app.use("/api/ai", aiRouter);
 
 // Unknown routes
 app.use((_req: Request, res: Response) => {
