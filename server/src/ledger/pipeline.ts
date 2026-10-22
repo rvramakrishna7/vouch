@@ -5,6 +5,7 @@ import { wrapUserContent, PROMPT_INJECTION_SYSTEM_GUARD } from "../ai/guard.js";
 import { AiInvalidOutputError, AiUnavailableError } from "../ai/types.js";
 import { splitIntoSentences } from "./sentences.js";
 import { retrieveCandidateFacts, type FactCandidate } from "./retrieve.js";
+import { runRuleChecks, type TermInput } from "../engine/ruleChecks.js";
 
 export const claimExtractionSchema = z.object({
   claims: z.array(
@@ -83,6 +84,99 @@ export function dedupePunctuation(replacement: string, nextChar?: string): strin
     return replacement.slice(0, -1);
   }
   return replacement;
+}
+
+export function extractNumbers(text: string): number[] {
+  const matches = text.match(/\b\d+(?:\.\d+)?\b/g);
+  if (!matches) return [];
+  return matches.map((m) => parseFloat(m));
+}
+
+export interface FactCheckReplacementOptions {
+  replacement: string;
+  verdict: string;
+  candidateFacts: FactCandidate[];
+  todayStr: string;
+  terms: TermInput[];
+  regulatedTerms: string[];
+}
+
+export interface FactCheckReplacementResult {
+  valid: boolean;
+  replacement: string | null;
+  note: string | null;
+}
+
+export function factCheckReplacement(options: FactCheckReplacementOptions): FactCheckReplacementResult {
+  const { replacement, verdict, candidateFacts, todayStr, terms, regulatedTerms } = options;
+
+  // a) the verdict is outdated (an expired fact may not be reused in a fix)
+  if (verdict === "outdated") {
+    return {
+      valid: false,
+      replacement: null,
+      note: "Expired facts cannot be reused in a suggested fix.",
+    };
+  }
+
+  // b) runRuleChecks on the replacement finds any banned term
+  const bannedTerms = terms.filter((t) => t.type === "banned");
+  if (bannedTerms.length > 0) {
+    const bannedFindings = runRuleChecks(replacement, { rules: [], terms: bannedTerms });
+    if (bannedFindings.length > 0) {
+      return {
+        valid: false,
+        replacement: null,
+        note: `Replacement contains banned term: "${bannedFindings[0].span_text}".`,
+      };
+    }
+  }
+
+  // Get in-date candidate facts and their numbers
+  const inDateFacts = candidateFacts.filter((f) => new Date(f.valid_until) >= new Date(todayStr));
+  const inDateNumbers = new Set<number>();
+  for (const fact of inDateFacts) {
+    for (const n of extractNumbers(fact.statement)) {
+      inDateNumbers.add(n);
+    }
+  }
+
+  const replacementNumbers = extractNumbers(replacement);
+
+  // c) the replacement contains a regulated term but no number that appears in an IN-DATE candidate fact
+  const hasRegulated = regulatedTerms.some((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const prefix = /\w/.test(term[0]) ? "(?<!\\w)" : "";
+    const suffix = /\w/.test(term[term.length - 1]) ? "(?!\\w)" : "";
+    return new RegExp(`${prefix}${escaped}${suffix}`, "i").test(replacement);
+  });
+
+  if (hasRegulated) {
+    const hasInDateNumber = replacementNumbers.some((n) => inDateNumbers.has(n));
+    if (!hasInDateNumber) {
+      return {
+        valid: false,
+        replacement: null,
+        note: "Regulated term in replacement requires specific verified attributes from an in-date fact.",
+      };
+    }
+  }
+
+  // d) the replacement contains any number that does not appear in an in-date candidate fact
+  const hasUnauthorizedNumber = replacementNumbers.some((n) => !inDateNumbers.has(n));
+  if (hasUnauthorizedNumber) {
+    return {
+      valid: false,
+      replacement: null,
+      note: "Replacement contains numbers not verified by an in-date fact.",
+    };
+  }
+
+  return {
+    valid: true,
+    replacement,
+    note: null,
+  };
 }
 
 interface ClaimsRule {
@@ -166,6 +260,7 @@ export async function runClaimLedger(options: {
   channel: string;
   pool: Pool;
   regulatedTerms?: string[];
+  terms?: TermInput[];
 }): Promise<ClaimLedgerResult> {
   const { organizationId, body, purpose, audience, channel, pool } = options;
 
@@ -201,13 +296,21 @@ export async function runClaimLedger(options: {
     rulesMap.set(r.code.toUpperCase(), r);
   }
 
-  let regulatedTerms = options.regulatedTerms;
-  if (!regulatedTerms) {
-    const { rows: termRows } = await pool.query<{ term: string }>(
-      `SELECT term FROM terms WHERE organization_id = $1 AND type = 'regulated'`,
+  let terms = options.terms;
+  if (!terms) {
+    const { rows: termRows } = await pool.query<TermInput>(
+      `SELECT t.id, t.term, t.type, t.replacement, t.note, r.code as rule_code
+       FROM terms t
+       LEFT JOIN rules r ON r.id = t.rule_id
+       WHERE t.organization_id = $1`,
       [organizationId],
     );
-    regulatedTerms = termRows.map((t) => t.term);
+    terms = termRows;
+  }
+
+  let regulatedTerms = options.regulatedTerms;
+  if (!regulatedTerms) {
+    regulatedTerms = terms.filter((t) => t.type === "regulated").map((t) => t.term);
   }
 
   const candidateMap = new Map<string, FactCandidate>();
@@ -445,11 +548,36 @@ export async function runClaimLedger(options: {
     }
 
     // 4e. Replacement & Guidance
-    const validatedReplacement = validateReplacement(rawClaim.replacement, rawClaim.quote);
+    let validatedReplacement = validateReplacement(rawClaim.replacement, rawClaim.quote);
+    const guidanceNotes: string[] = [];
+
     if (rawClaim.guidance && rawClaim.guidance.trim()) {
+      guidanceNotes.push(rawClaim.guidance.trim());
+    }
+
+    if (validatedReplacement) {
+      const factCheck = factCheckReplacement({
+        replacement: validatedReplacement,
+        verdict: finalVerdict,
+        candidateFacts,
+        todayStr,
+        terms,
+        regulatedTerms,
+      });
+
+      if (!factCheck.valid) {
+        validatedReplacement = null;
+        if (factCheck.note) {
+          guidanceNotes.push(factCheck.note);
+        }
+      }
+    }
+
+    if (guidanceNotes.length > 0) {
+      const fullGuidance = guidanceNotes.join(" ");
       finalReason = finalReason
-        ? `${finalReason} Guidance: ${rawClaim.guidance.trim()}`
-        : `Guidance: ${rawClaim.guidance.trim()}`;
+        ? `${finalReason} Guidance: ${fullGuidance}`
+        : `Guidance: ${fullGuidance}`;
     }
 
     validatedFindings.push({

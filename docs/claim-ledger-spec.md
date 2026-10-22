@@ -19,8 +19,14 @@ Owner-approved spec for the core of Vouch. Implements DEC-005 with the faster pi
    - Expiry is decided by code from `valid_until` vs today, not by the model: if the cited fact is expired, verdict becomes `outdated` (even if the model said supported); if the model said outdated but the fact is not expired -> `needs_human_judgement`.
    - Regulated terms guard: if the model says supported and the quote contains a Brand Kit term of type "regulated" (case-insensitive), set verdict to needs_human_judgement with reason "Regulated term: a reviewer must confirm the specific attribute is stated in the text."
    - Numeric cross-check: extract number+unit pairs (units: %, percent, hour/hours/hr, minute/minutes, day/days, year/years, kg, g, ml, l/litre/liter) from the claim quote and from the candidate facts retrieved for that sentence. If a fact has the SAME unit but none of its numbers equals the claim's number, set verdict = contradicted, cite that fact and rule CLAIM-03. This applies whatever the model said (overriding a wrong "supported" or "unsupported"). If numbers match, leave the model's verdict.
-   - Replacement validation: `replacement` is nulled if it is longer than `max(3 * quote length, quote length + 60)` characters, or if it starts with an instruction verb (`adjust`, `provide`, `remove`, `replace`, `consider`, `use`, `add`, `cite`, `ensure`, `avoid`, `change`). Valid replacement is stored in `findings.suggested_fix`.
-   - Guidance appending: `guidance` from the model is appended to `findings.reason`.
+   - Replacement validation: `replacement` is nulled if it is longer than `max(3 * quote length, quote length + 60)` characters, or if it starts with an instruction verb (`adjust`, `provide`, `remove`, `replace`, `consider`, `use`, `add`, `cite`, `ensure`, `avoid`, `change`).
+   - Replacement fact-checking: set `replacement = null` (and add a short note to guidance) when:
+     a) the verdict is outdated (an expired fact may not be reused in a fix);
+     b) runRuleChecks on the replacement finds any banned term;
+     c) the replacement contains a regulated term but no number that appears in an in-date candidate fact;
+     d) the replacement contains any number that does not appear in an in-date candidate fact.
+   - Valid replacement is stored in `findings.suggested_fix`.
+   - Guidance appending: `guidance` from the model (plus any replacement validation notes) is appended to `findings.reason`.
    - Punctuation deduplication on apply_fixes: when applying fixes, if the replacement ends with the same punctuation mark that immediately follows the span, drop one so no "..", "!!", or ".!" is produced.
    - unsupported must cite an active claims rule; otherwise rule_code = null (suggestion only, invariant 1).
    - contradicted and outdated cite rule `CLAIM-03` when it is active.
