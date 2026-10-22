@@ -7,14 +7,29 @@ Updated by the worker at the end of every task. Planner and owner read it first.
 - **Repo:** https://github.com/rvramakrishna7/vouch
 
 ## Current state
-Monorepo scaffolded and pushed to `main`. `client/` (Vite + React + TS + Tailwind v4) builds and shows the API health status. `server/` (Express + TS, ESM, Vercel-style `export default app` with a separate `local.ts` listener) has GET /api/health, CORS restricted to CLIENT_ORIGIN, a 4 MB JSON limit, a JSON error handler, and 1 passing vitest + supertest test. Not deployed yet.
+Monorepo scaffolded and pushed to `main`. `client/` (Vite + React + TS + Tailwind v4) builds and shows the API health status. `server/` (Express + TS, ESM, Vercel-style `export default app` with a separate `local.ts` listener) has GET /api/health, CORS restricted to CLIENT_ORIGIN, a 4 MB JSON limit, a JSON error handler.
+
+Database schema (001_init.sql with pgvector, DEC-013 offsets, tenant isolation, and audit_events append-only trigger) applied to Supabase PostgreSQL. Demo brand ("Aqualeaf" and "Northwind Labs") seeded idempotently. Vitest suite passes (6/6 tests). Verified row counts:
+- schema_migrations: 1
+- organizations: 2
+- users: 4
+- rules: 10
+- facts: 8
+- terms: 9
+- contents: 2
+- revisions: 2
+- reviews: 0
+- findings: 0
+- comments: 0
+- approvals: 0
+- audit_events: 2
 
 ## Steps
 | Step | Name | Target | Status |
 |---|---|---|---|
 | S0 | Environment check (read-only) | 22 Oct, before 10:00 | Done: Node 24.13.1, npm 11.8.0, git 2.52.0, Windows 11, PowerShell 5.1 |
 | S1 | Scaffold monorepo, git, push; owner connects two Vercel projects; health check live | 22 Oct | Code done, awaiting hosting. S1.1 hotfix merged: server TypeScript pinned to 5.9.3 (DEC-015 Proposed), server/vercel.json region bom1; owner to redeploy server |
-| S2 | DB schema + migrations + fictional demo brand seed | 22 Oct | Blocked: DATABASE_URL in server/.env does not resolve (ENOTFOUND); owner to set the Supabase pooler URL |
+| S2 | DB schema + migrations + fictional demo brand seed | 22 Oct | Done: schema migrated, demo brand seeded, 6/6 tests passing, row counts verified |
 | S3 | Auth, roles, one-click demo logins | 22 Oct | Pending |
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Pending |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Pending |
@@ -28,8 +43,8 @@ Monorepo scaffolded and pushed to `main`. `client/` (Vite + React + TS + Tailwin
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-Owner redeploys the server Vercel project and confirms the build passes and /api/health is live (region bom1). Owner puts the Supabase Transaction pooler URL into server/.env, then re-sends S2.
+S3: Auth, roles, one-click demo logins.
 
 ## Open issues
-- S2 blocked on DATABASE_URL (host does not resolve).
 - DEC-015 (TypeScript 5.9 pin) awaiting owner decision.
+- DEC-016 (rejectUnauthorized: false for Supabase pooler TLS) awaiting owner decision.
