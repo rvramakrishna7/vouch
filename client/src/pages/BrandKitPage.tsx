@@ -1,4 +1,17 @@
+import { useState } from "react";
+import { useAuth } from "../auth/AuthContext.js";
+import { FactsTab } from "./brand-kit/FactsTab.js";
+import { RulesTab } from "./brand-kit/RulesTab.js";
+import { TermsTab } from "./brand-kit/TermsTab.js";
+
+type Tab = "rules" | "facts" | "terms";
+
 export function BrandKitPage() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("rules");
+
+  const isBrandManager = user?.role === "brand_manager";
+
   return (
     <div className="space-y-6">
       <div>
@@ -6,17 +19,64 @@ export function BrandKitPage() {
           Brand Kit
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage your brand&apos;s numbered rules, approved facts with source citations and expiry dates, and brand terminology.
+          The single source of truth for your brand: numbered rules, approved facts with verification dates, and terminology.
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Governance &amp; Truth Source
-        </h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Rule management, facts catalog with expiry tracking, banned/regulated terms, and guideline import will appear here in Step S4 and S11.
-        </p>
+      {!isBrandManager && (
+        <div
+          role="status"
+          className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800 rounded-xl"
+        >
+          <span className="font-semibold">Note:</span>
+          <span>Read-only: only the Brand Manager can change the Brand Kit.</span>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="border-b border-slate-200">
+        <nav className="flex space-x-6" aria-label="Brand Kit Tabs">
+          <button
+            type="button"
+            onClick={() => setActiveTab("rules")}
+            className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "rules"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Rules
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("facts")}
+            className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "facts"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Approved Facts
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("terms")}
+            className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "terms"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Controlled Terms
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab Panels */}
+      <div>
+        {activeTab === "rules" && <RulesTab isBrandManager={isBrandManager} />}
+        {activeTab === "facts" && <FactsTab isBrandManager={isBrandManager} />}
+        {activeTab === "terms" && <TermsTab isBrandManager={isBrandManager} />}
       </div>
     </div>
   );
