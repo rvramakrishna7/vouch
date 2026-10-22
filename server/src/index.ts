@@ -1,6 +1,9 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import authRouter from "./routes/auth.js";
+import factsRouter from "./routes/facts.js";
+import rulesRouter from "./routes/rules.js";
+import termsRouter from "./routes/terms.js";
 
 const app = express();
 
@@ -26,8 +29,11 @@ app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "vouch-server", time: new Date().toISOString() });
 });
 
-// Auth routes
+// Routes
 app.use("/api/auth", authRouter);
+app.use("/api/rules", rulesRouter);
+app.use("/api/facts", factsRouter);
+app.use("/api/terms", termsRouter);
 
 // Unknown routes
 app.use((_req: Request, res: Response) => {
