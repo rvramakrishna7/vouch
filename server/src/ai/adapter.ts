@@ -70,12 +70,15 @@ async function callGeminiRaw(
     throw err;
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const start = performance.now();
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify({
       systemInstruction: {
         parts: [{ text: systemPrompt }],
@@ -333,13 +336,16 @@ export async function embed(texts: string[]): Promise<number[][]> {
   }
 
   const embedModel = getGeminiEmbedModel();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel}:batchEmbedContents?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel}:batchEmbedContents`;
   const start = performance.now();
 
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify({
         requests: texts.map((text) => ({
           model: `models/${embedModel}`,

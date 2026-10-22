@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 export interface RequestTimingStore {
   startTime: number;
   dbTime: number;
+  aiTime: number;
 }
 
 export const timingStorage = new AsyncLocalStorage<RequestTimingStore>();
@@ -16,6 +17,7 @@ export function timingMiddleware(
   const store: RequestTimingStore = {
     startTime: performance.now(),
     dbTime: 0,
+    aiTime: 0,
   };
 
   timingStorage.run(store, () => {
@@ -26,10 +28,12 @@ export function timingMiddleware(
       if (!res.headersSent) {
         const totalDuration = performance.now() - store.startTime;
         const dbDuration = store.dbTime;
-        res.setHeader(
-          "Server-Timing",
-          `db;dur=${dbDuration.toFixed(1)}, total;dur=${totalDuration.toFixed(1)}`,
-        );
+        const parts = [
+          ...(store.aiTime > 0 ? [`ai;dur=${store.aiTime.toFixed(1)}`] : []),
+          `db;dur=${dbDuration.toFixed(1)}`,
+          `total;dur=${totalDuration.toFixed(1)}`,
+        ];
+        res.setHeader("Server-Timing", parts.join(", "));
       }
       return (originalEnd as any)(...args);
     };

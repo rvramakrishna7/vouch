@@ -11,6 +11,8 @@ import {
   type RuleInput,
   type TermInput,
 } from "../engine/ruleChecks.js";
+import { runClaimLedger, type ValidatedClaimFinding } from "../ledger/pipeline.js";
+import { timingStorage } from "../middleware/timing.js";
 
 export const contentsRouter = Router();
 
@@ -308,15 +310,19 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. In one round-trip: verify content access and fetch latest revision
+    // 1. In one round-trip: verify content access and fetch latest revision + context
     const { rows: contentRows } = await pool.query<{
       id: string;
       created_by: string;
+      purpose: string;
+      audience: string;
+      channel: string;
       revision_id: string;
       revision_n: number;
       revision_body: string;
     }>(
-      `SELECT c.id, c.created_by, r.id AS revision_id, r.n AS revision_n, r.body AS revision_body
+      `SELECT c.id, c.created_by, c.purpose, c.audience, c.channel,
+              r.id AS revision_id, r.n AS revision_n, r.body AS revision_body
        FROM contents c
        JOIN revisions r ON r.content_id = c.id AND r.organization_id = c.organization_id
        WHERE c.id = $1 AND c.organization_id = $2
@@ -334,8 +340,8 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "not_found" });
     }
 
-    // 2. Fetch rules and terms in parallel
-    const [rulesRes, termsRes] = await Promise.all([
+    // 2. Fetch rules, terms, and execute Claim Ledger in parallel
+    const [rulesRes, termsRes, ledgerResult] = await Promise.all([
       pool.query<RuleInput>(
         `SELECT id, code, category, severity, text, status
          FROM rules
@@ -349,14 +355,58 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
          WHERE t.organization_id = $1`,
         [orgId],
       ),
+      runClaimLedger({
+        organizationId: orgId,
+        body: content.revision_body,
+        purpose: content.purpose,
+        audience: content.audience,
+        channel: content.channel,
+        pool,
+      }),
     ]);
 
     const rules = rulesRes.rows;
     const terms = termsRes.rows;
-    const ruleCodeToId = new Map(rules.map((r) => [r.code, r.id]));
+    const ruleCodeToId = new Map(rules.map((r: RuleInput) => [r.code, r.id]));
+
+    // Record AI timing in Server-Timing store
+    const timingStore = timingStorage.getStore();
+    if (timingStore && ledgerResult.aiLatencyMs) {
+      timingStore.aiTime += ledgerResult.aiLatencyMs;
+    }
 
     // 3. Run pure rule checks
-    const computedFindings = runRuleChecks(content.revision_body, { rules, terms });
+    const ruleFindings = runRuleChecks(content.revision_body, { rules, terms });
+
+    // Combine rule findings and validated claim ledger findings
+    const allFindings = [
+      ...ruleFindings.map((f) => ({
+        kind: f.kind,
+        span_text: f.span_text,
+        start_offset: f.start_offset,
+        end_offset: f.end_offset,
+        verdict: null as string | null,
+        rule_id: f.rule_code ? (ruleCodeToId.get(f.rule_code) ?? null) : null,
+        fact_id: null as string | null,
+        reason: f.reason,
+        severity: f.severity,
+        confidence: f.confidence,
+        suggested_fix: f.suggested_fix,
+      })),
+      ...ledgerResult.findings.map((f: ValidatedClaimFinding) => ({
+        kind: "claim" as const,
+        span_text: f.span_text,
+        start_offset: f.start_offset,
+        end_offset: f.end_offset,
+        verdict: f.verdict as string | null,
+        rule_id: f.rule_id,
+        fact_id: f.fact_id,
+        reason: f.reason,
+        severity: f.severity,
+        confidence: f.confidence,
+        suggested_fix: f.suggested_fix,
+      })),
+    ];
 
     // 4. In one transaction: save review, batch insert findings, and audit log
     const client = await pool.connect();
@@ -364,45 +414,53 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
       await client.query("BEGIN");
 
       const { rows: reviewRows } = await client.query(
-        `INSERT INTO reviews (organization_id, revision_id, provider, model, started_at, finished_at)
-         VALUES ($1, $2, 'rules', 'vouch-rules-v1', now(), now())
-         RETURNING id, organization_id, revision_id, provider, model, started_at, finished_at, created_at`,
-        [orgId, content.revision_id],
+        `INSERT INTO reviews (
+           organization_id, revision_id, provider, model, started_at, finished_at,
+           ai_status, ai_provider, ai_model, ai_latency_ms
+         )
+         VALUES ($1, $2, 'rules', 'vouch-rules-v1', now(), now(), $3, $4, $5, $6)
+         RETURNING id, organization_id, revision_id, provider, model, started_at, finished_at, created_at,
+                   ai_status, ai_provider, ai_model, ai_latency_ms`,
+        [
+          orgId,
+          content.revision_id,
+          ledgerResult.aiStatus,
+          ledgerResult.aiProvider,
+          ledgerResult.aiModel,
+          ledgerResult.aiLatencyMs,
+        ],
       );
       const review = reviewRows[0];
 
       // Batch insert findings in one query if any findings exist
-      if (computedFindings.length > 0) {
+      if (allFindings.length > 0) {
         const valueClauses: string[] = [];
         const params: any[] = [orgId, review.id];
         let paramIdx = 3;
 
-        for (const f of computedFindings) {
-          const resolvedRuleId = f.rule_code
-            ? (ruleCodeToId.get(f.rule_code) ?? null)
-            : null;
-
-          valueClauses.push(
-            `($1, $2, $${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, NULL, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8})`,
-          );
+        for (const f of allFindings) {
+          const placeholders = Array.from({ length: 11 }, (_, i) => `$${paramIdx + i}`).join(", ");
+          valueClauses.push(`($1, $2, ${placeholders})`);
           params.push(
             f.kind,
             f.span_text,
             f.start_offset,
             f.end_offset,
-            resolvedRuleId,
+            f.verdict,
+            f.rule_id,
+            f.fact_id,
             f.reason,
             f.severity,
             f.confidence,
             f.suggested_fix,
           );
-          paramIdx += 9;
+          paramIdx += 11;
         }
 
         await client.query(
           `INSERT INTO findings (
              organization_id, review_id, kind, span_text, start_offset, end_offset,
-             verdict, rule_id, reason, severity, confidence, suggested_fix
+             verdict, rule_id, fact_id, reason, severity, confidence, suggested_fix
            )
            VALUES ${valueClauses.join(", ")}`,
           params,
@@ -417,22 +475,25 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
         payload: {
           content_id: content.id,
           revision_id: content.revision_id,
-          findings_count: computedFindings.length,
+          findings_count: allFindings.length,
+          ai_status: ledgerResult.aiStatus,
         },
         client,
       });
 
       await client.query("COMMIT");
 
-      // Query findings joined with rules table for response
+      // Query findings joined with rules and facts tables for response
       const { rows: findings } = await pool.query(
         `SELECT f.id, f.organization_id, f.review_id, f.kind, f.span_text,
-                f.start_offset, f.end_offset, f.verdict, f.rule_id,
-                r.code AS rule_code, r.text AS rule_text,
+                f.start_offset, f.end_offset, f.verdict,
+                f.rule_id, r.code AS rule_code, r.text AS rule_text,
+                f.fact_id, fa.code AS fact_code, fa.statement AS fact_statement, fa.valid_until AS fact_valid_until,
                 f.reason, f.severity, f.confidence, f.suggested_fix,
                 f.resolution, f.dismiss_reason, f.created_at
          FROM findings f
          LEFT JOIN rules r ON f.rule_id = r.id
+         LEFT JOIN facts fa ON f.fact_id = fa.id
          WHERE f.review_id = $1 AND f.organization_id = $2
          ORDER BY f.start_offset ASC, f.id ASC`,
         [review.id, orgId],

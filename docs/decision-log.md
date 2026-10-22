@@ -22,7 +22,8 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-016 | 2026-10-22 | Supabase pooler TLS: rejectUnauthorized:false with warning unless SUPABASE_CA_CERT is provided | Accepted |
 | DEC-017 | 2026-10-22 | JWT (8h expiry) sent as Authorization: Bearer; client stores it in sessionStorage (client and server are different vercel.app sites, so cookies are unreliable) | Accepted |
 | DEC-018 | 2026-10-22 | RLS enabled on every table in schema public with no policies, so Supabase's public Data API cannot read data. The server's postgres role bypasses RLS | Accepted |
-| DEC-019 | 2026-10-22 | Plain fetch for AI adapter (Gemini and Groq) instead of vendor SDKs to minimize function cold starts and simplify timeout handling | Proposed |
+| DEC-019 | 2026-10-22 | Plain fetch for AI adapter (Gemini and Groq) instead of vendor SDKs to minimize function cold starts and simplify timeout handling | Accepted |
+| DEC-020 | 2026-10-22 | Claim Ledger pipeline: code retrieves candidate facts per sentence via embeddings, then ONE LLM call extracts and verifies claims, then code validates every citation (docs/claim-ledger-spec.md). Faster than two LLM calls; the model still never has the final word (DEC-005) | Accepted |
 
 ---
 
@@ -84,3 +85,8 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 - **Decision (Proposed):** Call REST endpoints directly using standard globalThis.fetch with AbortSignal.timeout(timeoutMs).
 - **Why:** Keeps Vercel deployment minimal, guarantees clean cold starts, supports exact request-body inspection, and enables zero-dependency mocking in Vitest.
 - **Tradeoff:** Request and response envelopes are written manually with zod validation rather than through SDK types.
+
+### DEC-020: Claim Ledger single-LLM pipeline with code validation (owner)
+- **Context:** DEC-005 planned a 2-step LLM pipeline (Extract then Verify). With round-trips taking 1-2s each on external AI endpoints, 2 sequential LLM calls in one review request adds unnecessary latency.
+- **Decision (Accepted):** Code splits content into sentences, embeds them in a single batch, and retrieves top candidate facts via pgvector cosine distance. Then ONE LLM call extracts claims and verifies them against the candidate facts and claims rules. Code strictly validates quote presence, offsets, fact codes, and expiry (docs/claim-ledger-spec.md).
+- **Why:** Delivers full explainability and citations in a single AI call while preserving Invariant 2 (the model never has the final word on evidence).
