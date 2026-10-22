@@ -16,7 +16,8 @@ export const claimExtractionSchema = z.object({
       rule_code: z.string().nullable(),
       reason: z.string(),
       confidence: z.number().min(0).max(1),
-      suggested_fix: z.string().nullable(),
+      replacement: z.string().nullable(),
+      guidance: z.string().nullable().optional(),
     }),
   ),
 });
@@ -48,6 +49,40 @@ export interface ClaimLedgerResult {
   aiProvider: string | null;
   aiModel: string | null;
   aiLatencyMs: number | null;
+}
+
+export const INSTRUCTION_VERBS = /^(adjust|provide|remove|replace|consider|use|add|cite|ensure|avoid|change)\b/i;
+
+export function validateReplacement(
+  replacement: string | null | undefined,
+  quote: string,
+): string | null {
+  if (!replacement) return null;
+  const trimmed = replacement.trim();
+  if (!trimmed) return null;
+
+  // Max length: max(3 * quote length, quote length + 60)
+  const maxLen = Math.max(3 * quote.length, quote.length + 60);
+  if (trimmed.length > maxLen) {
+    return null;
+  }
+
+  // Starts with an instruction verb
+  if (INSTRUCTION_VERBS.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+export function dedupePunctuation(replacement: string, nextChar?: string): string {
+  if (!replacement || !nextChar) return replacement;
+  const lastChar = replacement[replacement.length - 1];
+  const isPunct = (c: string) => c === "." || c === "!" || c === "?";
+  if (isPunct(lastChar) && isPunct(nextChar)) {
+    return replacement.slice(0, -1);
+  }
+  return replacement;
 }
 
 interface ClaimsRule {
@@ -209,13 +244,18 @@ export async function runClaimLedger(options: {
     `quote requirements:\n` +
     `- quote MUST be copied verbatim from the submitted content.\n` +
     `- occurrence is an optional 1-based integer if the quote appears multiple times.\n\n` +
-    `suggested_fix requirements:\n` +
-    `- Must preserve the author's declared purpose.\n` +
-    `- Must use ONLY the approved facts.\n` +
-    `- null if no honest fix exists.\n\n` +
+    `replacement requirements:\n` +
+    `- The exact literal text that should REPLACE the quoted span in the content, with the same grammatical form (e.g. if the quote is "Keeps drinks cold for 48 hours.", the replacement is "Keeps drinks cold for 24 hours.").\n` +
+    `- Must preserve the author's declared purpose and use ONLY the provided facts.\n` +
+    `- null if no honest replacement exists.\n` +
+    `- NEVER provide advice, instructions, or meta-commentary here (e.g. do not say "Adjust the claim..." or "Remove the claim...").\n\n` +
+    `guidance requirements:\n` +
+    `- Advice or instructions for the creator (e.g. explaining what fact was used or what to change).\n` +
+    `- Never inserted into the text.\n` +
+    `- null if no extra advice needed.\n\n` +
     `Today's date is: ${todayStr}.\n\n` +
     `Return JSON strictly matching this schema:\n` +
-    `{ "claims": [ { "quote": string, "occurrence": number, "verdict": "supported"|"contradicted"|"unsupported"|"outdated", "fact_code": string|null, "rule_code": string|null, "reason": string, "confidence": number (0..1), "suggested_fix": string|null } ] }`;
+    `{ "claims": [ { "quote": string, "occurrence": number, "verdict": "supported"|"contradicted"|"unsupported"|"outdated", "fact_code": string|null, "rule_code": string|null, "reason": string, "confidence": number (0..1), "replacement": string|null, "guidance": string|null } ] }`;
 
   const userPrompt =
     `Declared Content Context:\n` +
@@ -404,6 +444,14 @@ export async function runClaimLedger(options: {
       severity = "medium";
     }
 
+    // 4e. Replacement & Guidance
+    const validatedReplacement = validateReplacement(rawClaim.replacement, rawClaim.quote);
+    if (rawClaim.guidance && rawClaim.guidance.trim()) {
+      finalReason = finalReason
+        ? `${finalReason} Guidance: ${rawClaim.guidance.trim()}`
+        : `Guidance: ${rawClaim.guidance.trim()}`;
+    }
+
     validatedFindings.push({
       kind: "claim",
       span_text: rawClaim.quote,
@@ -420,7 +468,7 @@ export async function runClaimLedger(options: {
       reason: finalReason,
       severity,
       confidence: Math.max(0, Math.min(1, rawClaim.confidence || 0.8)),
-      suggested_fix: rawClaim.suggested_fix || null,
+      suggested_fix: validatedReplacement,
     });
   }
 

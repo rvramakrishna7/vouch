@@ -125,7 +125,7 @@ async function main() {
     process.exit(1);
   }, 300000);
 
-  console.log("=== Claim Ledger 10-Run Benchmark (S8a.2 Owner Decision) ===");
+  console.log("=== Claim Ledger 5-Run Benchmark (Task S9a.1) ===");
   console.log("Configuration: Groq primary (openai/gpt-oss-120b, temp=0), Gemini fallback (8000ms timeout)\n");
 
   delete process.env.PRIMARY_AI_PROVIDER;
@@ -161,7 +161,7 @@ async function main() {
     const draft = contentRows[0];
     console.log(`Content Body: "${draft.body}"\n`);
 
-    const numRuns = 10;
+    const numRuns = 5;
     const runSummaries: { run: number; latencySec: number; provider: string; model: string; score: number; status: string }[] = [];
     let evaluatedRuns = 0;
 
@@ -208,6 +208,21 @@ async function main() {
         }
 
         console.log(`Result: ${runScore}/5 correct\n`);
+
+        const claimsWithReplacement = res.findings.filter((f) => f.kind === "claim" && f.suggested_fix);
+        if (claimsWithReplacement.length > 0) {
+          console.log("Claims with replacements & substituted sentences:");
+          for (const f of claimsWithReplacement) {
+            const sentences = draft.body.split(/(?<=[.!?])\s+/);
+            const sentence = sentences.find((s) => s.includes(f.span_text)) || draft.body;
+            const substituted = sentence.replace(f.span_text, f.suggested_fix!);
+            console.log(`  - Quote: "${f.span_text}"`);
+            console.log(`    Replacement: "${f.suggested_fix}"`);
+            console.log(`    Substituted sentence: "${substituted}"`);
+          }
+          console.log("");
+        }
+
         runSummaries.push({
           run,
           latencySec: totalSec,
@@ -245,7 +260,7 @@ async function main() {
       }
     }
 
-    console.log("=== 10-RUN BENCHMARK SUMMARY ===");
+    console.log("=== 5-RUN BENCHMARK SUMMARY ===");
     console.log("| Run | Provider | Latency (s) | Score (/5) | Meets Soft Acceptance (>=4/5)? |");
     console.log("|---|---|---|---|---|");
     for (const s of runSummaries) {

@@ -11,7 +11,7 @@ import {
   type RuleInput,
   type TermInput,
 } from "../engine/ruleChecks.js";
-import { runClaimLedger, type ValidatedClaimFinding } from "../ledger/pipeline.js";
+import { runClaimLedger, type ValidatedClaimFinding, dedupePunctuation } from "../ledger/pipeline.js";
 import { timingStorage } from "../middleware/timing.js";
 
 export const contentsRouter = Router();
@@ -771,7 +771,9 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
       } else {
         applied.push(candidate.id);
         appliedSpans.push({ start: candidate.start_offset, end: candidate.end_offset });
-        newBody = newBody.slice(0, candidate.start_offset) + candidate.replacement + newBody.slice(candidate.end_offset);
+        const nextChar = latestRev.body[candidate.end_offset];
+        const cleanReplacement = dedupePunctuation(candidate.replacement, nextChar);
+        newBody = newBody.slice(0, candidate.start_offset) + cleanReplacement + newBody.slice(candidate.end_offset);
       }
     }
 
