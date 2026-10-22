@@ -22,6 +22,7 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-016 | 2026-10-22 | Supabase pooler TLS: rejectUnauthorized:false with warning unless SUPABASE_CA_CERT is provided | Accepted |
 | DEC-017 | 2026-10-22 | JWT (8h expiry) sent as Authorization: Bearer; client stores it in sessionStorage (client and server are different vercel.app sites, so cookies are unreliable) | Accepted |
 | DEC-018 | 2026-10-22 | RLS enabled on every table in schema public with no policies, so Supabase's public Data API cannot read data. The server's postgres role bypasses RLS | Accepted |
+| DEC-019 | 2026-10-22 | Plain fetch for AI adapter (Gemini and Groq) instead of vendor SDKs to minimize function cold starts and simplify timeout handling | Proposed |
 
 ---
 
@@ -76,3 +77,10 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 - **Context:** Supabase exposes PostgREST public Data API by default on schema `public`.
 - **Decision:** Enable RLS (`ALTER TABLE <t> ENABLE ROW LEVEL SECURITY`) on all tables with no policies. Supabase's anonymous/authenticated REST APIs cannot read or write data. The backend connects using the `postgres` superuser/bypass-rls role through Express.
 - **Tradeoff:** Direct Supabase client access is disabled; all data access routes through Express with tenant isolation.
+
+
+### DEC-019: Plain fetch for AI adapter (proposed by worker in S7)
+- **Context:** Gemini and Groq APIs are called from server/src/ai/. Using vendor SDKs adds large transitive dependencies and potential version conflicts on Vercel Functions.
+- **Decision (Proposed):** Call REST endpoints directly using standard globalThis.fetch with AbortSignal.timeout(timeoutMs).
+- **Why:** Keeps Vercel deployment minimal, guarantees clean cold starts, supports exact request-body inspection, and enables zero-dependency mocking in Vitest.
+- **Tradeoff:** Request and response envelopes are written manually with zod validation rather than through SDK types.
