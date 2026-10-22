@@ -292,6 +292,187 @@ describe.runIf(hasDb)("Claim Ledger Pipeline (S8a)", () => {
     expect(findings[4].rule_code).toBeNull();
   });
 
+  it("overrides model 'supported' on regulated terms to needs_human_judgement", async () => {
+    const mockVector768 = Array.from({ length: 768 }, () => 0.02);
+
+    const mockAiResponse = {
+      claims: [
+        {
+          quote: "eco-friendly",
+          occurrence: 1,
+          verdict: "supported",
+          fact_code: "F-07",
+          rule_code: null,
+          reason: "Environmental claim backed by recycled stainless steel",
+          confidence: 0.9,
+          suggested_fix: null,
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("batchEmbedContents")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              embeddings: Array(10).fill({ values: mockVector768 }),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (urlStr.includes("generateContent")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: JSON.stringify(mockAiResponse) }],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled mock fetch: ${urlStr}`));
+    });
+
+    globalThis.fetch = fetchMock;
+
+    const result = await runClaimLedger({
+      organizationId: aqualeafOrgId,
+      body: "India's No.1 eco-friendly water bottle, now 40% lighter.",
+      purpose: "Launch caption",
+      audience: "Consumers",
+      channel: "Instagram",
+      pool,
+    });
+
+    expect(result.aiStatus).toBe("ok");
+    expect(result.findings).toHaveLength(1);
+    const finding = result.findings[0];
+    expect(finding.span_text).toBe("eco-friendly");
+    expect(finding.verdict).toBe("needs_human_judgement");
+    expect(finding.reason).toBe(
+      "Regulated term: a reviewer must confirm the specific attribute is stated in the text.",
+    );
+    expect(finding.severity).toBe("medium");
+  });
+
+  it("numeric cross-check: overrides to contradicted when fact has same unit but different number", async () => {
+    const mockVector768 = Array.from({ length: 768 }, () => 0.02);
+
+    const mockAiResponse = {
+      claims: [
+        // 1. Model says unsupported for "cold for 48 hours", but F-15 has 24 hours -> contradicted
+        {
+          quote: "cold for 48 hours",
+          occurrence: 1,
+          verdict: "unsupported",
+          fact_code: null,
+          rule_code: "CLAIM-03",
+          reason: "Model thought no fact existed",
+          confidence: 0.9,
+          suggested_fix: null,
+        },
+        // 2. Model says supported for "40% lighter" and fact has 40% -> unchanged
+        {
+          quote: "40% lighter",
+          occurrence: 1,
+          verdict: "supported",
+          fact_code: "F-12",
+          rule_code: null,
+          reason: "40% matches fact F-12",
+          confidence: 0.95,
+          suggested_fix: null,
+        },
+        // 3. No shared unit -> unchanged
+        {
+          quote: "India's No.1",
+          occurrence: 1,
+          verdict: "unsupported",
+          fact_code: null,
+          rule_code: "CLAIM-01",
+          reason: "Superlative ranking",
+          confidence: 0.9,
+          suggested_fix: null,
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("batchEmbedContents")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              embeddings: Array(10).fill({ values: mockVector768 }),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify(mockAiResponse),
+                },
+              },
+            ],
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: JSON.stringify(mockAiResponse) }],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+
+    globalThis.fetch = fetchMock;
+
+    const result = await runClaimLedger({
+      organizationId: aqualeafOrgId,
+      body: "India's No.1 water bottle, now 40% lighter. Keeps cold for 48 hours.",
+      purpose: "Launch caption",
+      audience: "Consumers",
+      channel: "Instagram",
+      pool,
+    });
+
+    expect(result.aiStatus).toBe("ok");
+    const findings = result.findings;
+
+    // 1. Contradicted by F-15 (24 hours vs 48 hours)
+    const cold = findings.find((f) => f.span_text === "cold for 48 hours");
+    expect(cold).toBeDefined();
+    expect(cold!.verdict).toBe("contradicted");
+    expect(cold!.fact_code).toBe("F-15");
+    expect(cold!.rule_code).toBe("CLAIM-03");
+
+    // 2. Unchanged (40% lighter matches F-12)
+    const lighter = findings.find((f) => f.span_text === "40% lighter");
+    expect(lighter).toBeDefined();
+    expect(lighter!.verdict).toBe("supported");
+    expect(lighter!.fact_code).toBe("F-12");
+
+    // 3. No shared unit -> unchanged
+    const no1 = findings.find((f) => f.span_text === "India's No.1");
+    expect(no1).toBeDefined();
+    expect(no1!.verdict).toBe("unsupported");
+    expect(no1!.rule_code).toBe("CLAIM-01");
+  });
+
   it("TEST-010: AI_FORCE_FAIL=all saves review with rule findings and ai_status unavailable", async () => {
     process.env.AI_FORCE_FAIL = "all";
 

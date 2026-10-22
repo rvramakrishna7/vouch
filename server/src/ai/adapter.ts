@@ -57,6 +57,7 @@ async function callGeminiRaw(
   systemPrompt: string,
   userPrompt: string,
   timeoutMs: number,
+  temperature?: number,
 ): Promise<{ text: string; latencyMs: number }> {
   if (shouldForceFail("gemini")) {
     const err = new Error("Simulated Gemini 503 (AI_FORCE_FAIL)");
@@ -92,6 +93,7 @@ async function callGeminiRaw(
       ],
       generationConfig: {
         responseMimeType: "application/json",
+        ...(typeof temperature === "number" ? { temperature } : {}),
         ...( (process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING)
           ? {
               thinkingConfig: /^\d+$/.test(process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING)
@@ -131,6 +133,8 @@ async function callGroqRaw(
   systemPrompt: string,
   userPrompt: string,
   timeoutMs: number,
+  temperature?: number,
+  canRetry429 = true,
 ): Promise<{ text: string; latencyMs: number }> {
   if (shouldForceFail("groq")) {
     const err = new Error("Simulated Groq 503 (AI_FORCE_FAIL)");
@@ -161,6 +165,7 @@ async function callGroqRaw(
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
+      ...(typeof temperature === "number" ? { temperature } : {}),
       ...(process.env.GROQ_REASONING_EFFORT
         ? { reasoning_effort: process.env.GROQ_REASONING_EFFORT }
         : {}),
@@ -171,6 +176,26 @@ async function callGroqRaw(
   const latencyMs = performance.now() - start;
 
   if (!response.ok) {
+    if (response.status === 429 && canRetry429) {
+      const retryAfterHeader = response.headers.get("retry-after");
+      let waitSec = 0;
+      if (retryAfterHeader) {
+        const parsed = parseFloat(retryAfterHeader);
+        if (!isNaN(parsed)) {
+          waitSec = parsed;
+        } else {
+          const dateMs = Date.parse(retryAfterHeader);
+          if (!isNaN(dateMs)) {
+            waitSec = Math.max(0, (dateMs - Date.now()) / 1000);
+          }
+        }
+      }
+      if (waitSec > 0 && waitSec <= 5) {
+        await new Promise((r) => setTimeout(r, Math.ceil(waitSec * 1000)));
+        return callGroqRaw(model, systemPrompt, userPrompt, timeoutMs, temperature, false);
+      }
+    }
+
     const err = new Error(`Groq HTTP ${response.status}`);
     (err as any).status = response.status;
     logAiCall("groq", model, latencyMs, `HttpError_${response.status}`);
@@ -233,14 +258,15 @@ async function attemptGemini<T>(
   user: string,
   schema: z.ZodType<T>,
   timeoutMs: number,
+  temperature?: number,
 ): Promise<GenerateJsonResult<T>> {
   const geminiModel = getGeminiModel();
-  let callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs);
+  let callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs, temperature);
   let val = parseAndValidate(callRes.text, schema);
 
   if (!val.success) {
     const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-    callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs);
+    callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs, temperature);
     val = parseAndValidate(callRes.text, schema);
 
     if (!val.success) {
@@ -264,14 +290,15 @@ async function attemptGroq<T>(
   user: string,
   schema: z.ZodType<T>,
   timeoutMs: number,
+  temperature?: number,
 ): Promise<GenerateJsonResult<T>> {
   const groqModel = getGroqModel();
-  let callRes = await callGroqRaw(groqModel, system, user, timeoutMs);
+  let callRes = await callGroqRaw(groqModel, system, user, timeoutMs, temperature);
   let val = parseAndValidate(callRes.text, schema);
 
   if (!val.success) {
     const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-    callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs);
+    callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs, temperature);
     val = parseAndValidate(callRes.text, schema);
 
     if (!val.success) {
@@ -318,32 +345,51 @@ function isErrorFallbackEligible(err: any, provider: "gemini" | "groq"): boolean
 export async function generateJson<T>(
   options: GenerateJsonOptions<T>,
 ): Promise<GenerateJsonResult<T>> {
-  const { system, user, schema, timeoutMs = 20000, preferredProvider } = options;
+  const {
+    system,
+    user,
+    schema,
+    timeoutMs = 20000,
+    primaryTimeoutMs,
+    fallbackTimeoutMs,
+    preferredProvider,
+    temperature,
+  } = options;
   const primary = (process.env.PRIMARY_AI_PROVIDER || preferredProvider || "gemini") as "gemini" | "groq";
   const secondary = primary === "gemini" ? "groq" : "gemini";
 
-  const executeProvider = (p: "gemini" | "groq") =>
-    p === "gemini"
-      ? attemptGemini(system, user, schema, timeoutMs)
-      : attemptGroq(system, user, schema, timeoutMs);
+  const primaryTimeout = primaryTimeoutMs || timeoutMs;
+  const secondaryTimeout = fallbackTimeoutMs || timeoutMs;
 
+  const executeProvider = (p: "gemini" | "groq", timeout: number) =>
+    p === "gemini"
+      ? attemptGemini(system, user, schema, timeout, temperature)
+      : attemptGroq(system, user, schema, timeout, temperature);
+
+  let primaryErr: any = null;
   // Try Primary
   try {
-    return await executeProvider(primary);
+    return await executeProvider(primary, primaryTimeout);
   } catch (err: any) {
+    primaryErr = err;
     if (err instanceof AiInvalidOutputError) throw err;
     if (!isErrorFallbackEligible(err, primary)) {
-      throw new AiUnavailableError(`${primary} failed with error: ${err.message}`, err);
+      const errClass = err?.constructor?.name || err?.name || "Error";
+      throw new AiUnavailableError(`${primary} failed [${errClass}]: ${err.message}`, err);
     }
   }
 
   // Fallback to Secondary
   try {
-    return await executeProvider(secondary);
+    return await executeProvider(secondary, secondaryTimeout);
   } catch (err: any) {
     if (err instanceof AiInvalidOutputError) throw err;
+    const pClass = primaryErr?.constructor?.name || primaryErr?.name || "Error";
+    const sClass = err?.constructor?.name || err?.name || "Error";
+    const primaryInfo = `${primary} [${pClass}]: ${primaryErr?.message || "failed"}`;
+    const secondaryInfo = `${secondary} [${sClass}]: ${err?.message || "failed"}`;
     throw new AiUnavailableError(
-      `All AI providers failed. Primary (${primary}): failed; Secondary (${secondary}): ${err?.message || "error"}`,
+      `All AI providers failed. Primary (${primaryInfo}); Secondary (${secondaryInfo})`,
       err,
     );
   }

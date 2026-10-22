@@ -57,6 +57,32 @@ interface ClaimsRule {
   text: string;
 }
 
+export function normalizeUnit(u: string): string {
+  const lower = u.toLowerCase();
+  if (lower === "%" || lower === "percent") return "%";
+  if (lower.startsWith("hour") || lower.startsWith("hr")) return "hour";
+  if (lower.startsWith("min")) return "minute";
+  if (lower.startsWith("day")) return "day";
+  if (lower.startsWith("year") || lower.startsWith("yr")) return "year";
+  if (lower === "kg") return "kg";
+  if (lower === "g") return "g";
+  if (lower === "ml") return "ml";
+  if (lower === "l" || lower.startsWith("lit")) return "liter";
+  return lower;
+}
+
+export function extractNumberUnitPairs(text: string): Array<{ value: number; unit: string; rawUnit: string }> {
+  const regex = /\b(\d+(?:\.\d+)?)\s*(%|percent|hours?|hrs?|minutes?|mins?|days?|years?|yrs?|kg|g|ml|litres?|liters?|l)\b/gi;
+  const pairs: Array<{ value: number; unit: string; rawUnit: string }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const val = parseFloat(match[1]);
+    const unit = normalizeUnit(match[2]);
+    pairs.push({ value: val, unit, rawUnit: match[2] });
+  }
+  return pairs;
+}
+
 function findQuoteOffsets(
   fullText: string,
   quote: string,
@@ -104,6 +130,7 @@ export async function runClaimLedger(options: {
   audience: string;
   channel: string;
   pool: Pool;
+  regulatedTerms?: string[];
 }): Promise<ClaimLedgerResult> {
   const { organizationId, body, purpose, audience, channel, pool } = options;
 
@@ -139,6 +166,15 @@ export async function runClaimLedger(options: {
     rulesMap.set(r.code.toUpperCase(), r);
   }
 
+  let regulatedTerms = options.regulatedTerms;
+  if (!regulatedTerms) {
+    const { rows: termRows } = await pool.query<{ term: string }>(
+      `SELECT term FROM terms WHERE organization_id = $1 AND type = 'regulated'`,
+      [organizationId],
+    );
+    regulatedTerms = termRows.map((t) => t.term);
+  }
+
   const candidateMap = new Map<string, FactCandidate>();
   for (const f of candidateFacts) {
     candidateMap.set(f.code.toUpperCase(), f);
@@ -168,7 +204,8 @@ export async function runClaimLedger(options: {
     `- "supported": an approved, in-date fact directly states and supports this claim. Must cite fact_code.\n` +
     `- "contradicted": an approved fact says something different or incompatible with this claim. Must cite fact_code.\n` +
     `- "outdated": only an expired fact covers this claim. Must cite fact_code.\n` +
-    `- "unsupported": no approved fact covers this claim. Set fact_code: null and cite the applicable claims rule_code.\n\n` +
+    `- "unsupported": no approved fact covers this claim. Set fact_code: null and cite the applicable claims rule_code.\n` +
+    `- A vague or absolute claim (for example environmental, health or quality adjectives) is supported ONLY if the text itself states the specific attribute that the fact proves. Otherwise it is unsupported.\n\n` +
     `quote requirements:\n` +
     `- quote MUST be copied verbatim from the submitted content.\n` +
     `- occurrence is an optional 1-based integer if the quote appears multiple times.\n\n` +
@@ -192,11 +229,19 @@ export async function runClaimLedger(options: {
   // 3. Extract & verify via single LLM call
   let aiRes: Awaited<ReturnType<typeof generateJson<z.infer<typeof claimExtractionSchema>>>>;
   try {
+    const ledgerPrimaryProvider = (process.env.LEDGER_PRIMARY_PROVIDER || "groq") as "gemini" | "groq";
+    const primaryTimeoutMs = ledgerPrimaryProvider === "gemini" ? 8000 : 25000;
+    const fallbackTimeoutMs = ledgerPrimaryProvider === "groq" ? 8000 : 25000;
+
     aiRes = await generateJson({
       system: systemPrompt,
       user: userPrompt,
       schema: claimExtractionSchema,
+      preferredProvider: ledgerPrimaryProvider,
+      primaryTimeoutMs,
+      fallbackTimeoutMs,
       timeoutMs: 25000,
+      temperature: 0,
     });
   } catch (err: any) {
     if (err instanceof AiInvalidOutputError) {
@@ -227,6 +272,7 @@ export async function runClaimLedger(options: {
     // 4a. Quote & offset validation
     const offsets = findQuoteOffsets(body, rawClaim.quote, rawClaim.occurrence || 1);
     let finalVerdict: ValidatedClaimFinding["verdict"] = rawClaim.verdict;
+    let finalReason: string = rawClaim.reason;
     let finalFactId: string | null = null;
     let finalFactCode: string | null = null;
     let finalFactStatement: string | null = null;
@@ -268,6 +314,46 @@ export async function runClaimLedger(options: {
           // Model claimed outdated but fact is still in date -> needs_human_judgement
           finalVerdict = "needs_human_judgement";
         }
+      }
+    }
+
+    // Regulated terms guard: if the model says supported and the quote contains a Brand Kit term of type "regulated" (case-insensitive),
+    // set verdict to needs_human_judgement with reason "Regulated term: a reviewer must confirm the specific attribute is stated in the text."
+    if (finalVerdict === "supported" || rawClaim.verdict === "supported") {
+      const quoteLower = rawClaim.quote.toLowerCase();
+      const hasRegulatedTerm = regulatedTerms.some((t) =>
+        quoteLower.includes(t.toLowerCase().trim()),
+      );
+      if (hasRegulatedTerm) {
+        finalVerdict = "needs_human_judgement";
+        finalReason =
+          "Regulated term: a reviewer must confirm the specific attribute is stated in the text.";
+      }
+    }
+
+    // Numeric cross-check: extract number+unit pairs from the claim quote and candidate facts.
+    // If a fact has the SAME unit but none of its numbers equals the claim's number,
+    // set verdict = contradicted, cite that fact and rule CLAIM-03.
+    const claimPairs = extractNumberUnitPairs(rawClaim.quote);
+    if (claimPairs.length > 0) {
+      for (const pair of claimPairs) {
+        for (const candidateFact of candidateFacts) {
+          const factPairs = extractNumberUnitPairs(candidateFact.statement);
+          const sameUnitFactPairs = factPairs.filter((fp) => fp.unit === pair.unit);
+          if (sameUnitFactPairs.length > 0) {
+            const hasMatchingNumber = sameUnitFactPairs.some((fp) => fp.value === pair.value);
+            if (!hasMatchingNumber) {
+              finalVerdict = "contradicted";
+              finalFactId = candidateFact.id;
+              finalFactCode = candidateFact.code;
+              finalFactStatement = candidateFact.statement;
+              finalFactValidUntil = candidateFact.valid_until;
+              finalReason = `Contradicted by approved fact ${candidateFact.code}: fact states ${sameUnitFactPairs.map((p) => `${p.value} ${p.rawUnit}`).join(" / ")}, contradicting ${pair.value} ${pair.rawUnit}.`;
+              break;
+            }
+          }
+        }
+        if (finalVerdict === "contradicted" && finalFactCode) break;
       }
     }
 
@@ -331,7 +417,7 @@ export async function runClaimLedger(options: {
       rule_id: finalRuleId,
       rule_code: finalRuleCode,
       rule_text: finalRuleText,
-      reason: rawClaim.reason,
+      reason: finalReason,
       severity,
       confidence: Math.max(0, Math.min(1, rawClaim.confidence || 0.8)),
       suggested_fix: rawClaim.suggested_fix || null,

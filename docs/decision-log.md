@@ -25,6 +25,7 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-019 | 2026-10-22 | Plain fetch for AI adapter (Gemini and Groq) instead of vendor SDKs to minimize function cold starts and simplify timeout handling | Accepted |
 | DEC-020 | 2026-10-22 | Claim Ledger pipeline: code retrieves candidate facts per sentence via embeddings, then ONE LLM call extracts and verifies claims, then code validates every citation (docs/claim-ledger-spec.md). Faster than two LLM calls; the model still never has the final word (DEC-005) | Accepted |
 | DEC-021 | 2026-10-22 | Claim Ledger AI latency optimization: default model switched to gemini-3.5-flash-lite with thinkingLevel MINIMAL (benchmarked 2.51s-2.90s, 5/5 accuracy) | Accepted |
+| DEC-022 | 2026-10-22 | Claim Ledger stability: Groq primary (temp 0) with Gemini fallback (8s timeout), regulated-term guard, numeric cross-check, Groq 429 retry-after | Accepted |
 
 ---
 
@@ -97,3 +98,13 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 - **Benchmark (S8a.1):** 5 configurations benchmarked on the seeded draft (3 runs each). Config B (`gemini-3.5-flash-lite` with `thinkingLevel: MINIMAL`) was the only config to achieve 100% accuracy (5/5 correct verdicts) across all 3 runs, completing in 2.60 s, 2.90 s, and 2.51 s.
 - **Decision (Accepted):** Set `gemini-3.5-flash-lite` with `thinkingLevel: MINIMAL` as the default in code. Keeps Gemini primary per DEC-004 while bringing the LLM review step well under 3 seconds.
 - **Tradeoff:** Minimal internal reasoning tokens are consumed, which speeds up processing and eliminates intermittent 503 timeouts seen under unconstrained thinking.
+
+### DEC-022: Claim Ledger stability, Groq primary for ledger, and deterministic guards (owner decision)
+- **Context:** Gemini 3.5 series exhibited high latency spikes (10-13s) and intermittent HTTP 503 errors during batch review calls. Additionally, LLMs occasionally marked regulated or contradicted claims as supported without matching attributes or numbers.
+- **Benchmark (S8a.2):** 10-run benchmark in normal mode with 10s pause achieved 10/10 (100%) accuracy on all 5 claims with average latency of 3.35s using Groq `openai/gpt-oss-120b` (temp 0).
+- **Decision (Accepted, owner):**
+  1. For the LEDGER call only, Groq (`openai/gpt-oss-120b`, `temperature: 0`) is primary and Gemini is the fallback with an 8000 ms timeout. Env `LEDGER_PRIMARY_PROVIDER` (default "groq") can switch it back. Embeddings stay on Gemini. Other AI calls remain unchanged.
+  2. Groq 429 handling: if response has `retry-after` <= 5s, wait that duration and retry once before fallback.
+  3. Regulated-term guard in code: if model says `supported` and quote contains a Brand Kit term of type `regulated`, set verdict to `needs_human_judgement` ("Regulated term: a reviewer must confirm the specific attribute is stated in the text.").
+  4. Numeric cross-check in code: extract number+unit pairs from quote and candidate facts. If a candidate fact has the same unit but none of its numbers equals the claim's number, set verdict to `contradicted` citing that fact and rule `CLAIM-03`.
+- **Why:** Guarantees hard acceptance (no wrong "supported" verdicts) and soft acceptance (>= 4/5 per run) deterministically via code invariants.
