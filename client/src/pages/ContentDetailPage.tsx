@@ -111,15 +111,39 @@ export function ContentDetailPage() {
 
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchDetail = async () => {
+  const fetchAll = async () => {
     if (!id) return;
     setLoading(true);
+    setReviewLoading(true);
     setError(null);
+    setReviewError(null);
+
+    // Parallel execution of independent endpoints (Requirement 4)
+    const contentPromise = apiFetch<ContentDetail>(`/api/contents/${id}`);
+    const reviewPromise = apiFetch<{ review: Review; findings: Finding[] }>(
+      `/api/contents/${id}/reviews/latest`,
+    ).catch((err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    });
+
     try {
-      const data = await apiFetch<ContentDetail>(`/api/contents/${id}`);
-      setContent(data);
+      const [contentData, reviewData] = await Promise.all([
+        contentPromise,
+        reviewPromise,
+      ]);
+      setContent(contentData);
+      if (reviewData) {
+        setReview(reviewData.review);
+        setFindings(reviewData.findings || []);
+      } else {
+        setReview(null);
+        setFindings([]);
+      }
     } catch (err) {
-      console.error("Failed to load content details:", err);
+      console.error("Failed to load content:", err);
       if (err instanceof ApiError) {
         if (err.status === 404) {
           setError("Content not found or you do not have permission to view it.");
@@ -131,35 +155,12 @@ export function ContentDetailPage() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchLatestReview = async () => {
-    if (!id) return;
-    setReviewLoading(true);
-    setReviewError(null);
-    try {
-      const res = await apiFetch<{ review: Review; findings: Finding[] }>(
-        `/api/contents/${id}/reviews/latest`,
-      );
-      setReview(res.review);
-      setFindings(res.findings);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        // No review yet
-        setReview(null);
-        setFindings([]);
-      } else {
-        console.error("Failed to load latest review:", err);
-      }
-    } finally {
       setReviewLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDetail();
-    fetchLatestReview();
+    fetchAll();
   }, [id]);
 
   const handleRunReview = async () => {
@@ -205,18 +206,10 @@ export function ContentDetailPage() {
   const backLink = user?.role === "creator" ? "/content" : "/reviews";
   const backLabel = user?.role === "creator" ? "Content" : "Reviews";
 
-  if (loading) {
+  // Error state
+  if (error) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm max-w-5xl mx-auto">
-        <div className="inline-block animate-spin w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full mb-3" />
-        <p className="text-sm font-medium text-slate-500">Loading content details…</p>
-      </div>
-    );
-  }
-
-  if (error || !content) {
-    return (
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="max-w-6xl mx-auto space-y-4">
         <Link
           to={backLink}
           className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1"
@@ -225,10 +218,10 @@ export function ContentDetailPage() {
         </Link>
         <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-red-700">
           <h2 className="text-base font-semibold">Error Loading Content</h2>
-          <p className="mt-1 text-sm">{error ?? "Unable to find requested content."}</p>
+          <p className="mt-1 text-sm">{error}</p>
           <div className="mt-4">
             <button
-              onClick={fetchDetail}
+              onClick={fetchAll}
               className="text-sm font-semibold underline hover:text-red-900 cursor-pointer"
             >
               Retry
@@ -239,10 +232,10 @@ export function ContentDetailPage() {
     );
   }
 
-  const latestRevision = content.revisions?.[0];
-  const olderRevisions = (content.revisions ?? []).slice(1);
+  const latestRevision = content?.revisions?.[0];
+  const olderRevisions = (content?.revisions ?? []).slice(1);
 
-  // Compute severity counts
+  // Severity counts
   const highCount = findings.filter((f) => f.severity === "high").length;
   const mediumCount = findings.filter((f) => f.severity === "medium").length;
   const lowCount = findings.filter((f) => f.severity === "low").length;
@@ -268,7 +261,6 @@ export function ContentDetailPage() {
       );
     }
 
-    // Sort valid findings by start_offset
     const validSpans = [...findings]
       .filter(
         (f) =>
@@ -278,7 +270,6 @@ export function ContentDetailPage() {
       )
       .sort((a, b) => a.start_offset - b.start_offset || a.end_offset - b.end_offset);
 
-    // Pick non-overlapping spans
     const nonOverlapping: Array<{
       finding: Finding;
       start: number;
@@ -297,7 +288,6 @@ export function ContentDetailPage() {
       }
     }
 
-    // Split text into segments
     const segments: Array<{ text: string; finding?: Finding }> = [];
     let cursor = 0;
 
@@ -326,7 +316,6 @@ export function ContentDetailPage() {
           const f = seg.finding;
           const isSelected = highlightedFindingId === f.id;
 
-          // Severity highlight colors: high red, medium amber, low grey underline
           let highlightStyle =
             "bg-slate-100 text-slate-900 underline decoration-slate-400 decoration-2 underline-offset-4";
           if (f.severity === "high") {
@@ -367,10 +356,16 @@ export function ContentDetailPage() {
             &larr; Back to {backLabel}
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {content.title}
-            </h1>
-            <StatusBadge status={content.status} />
+            {loading ? (
+              <div className="h-8 w-64 bg-slate-200 rounded-md animate-pulse" />
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  {content?.title}
+                </h1>
+                {content && <StatusBadge status={content.status} />}
+              </>
+            )}
           </div>
         </div>
 
@@ -378,7 +373,7 @@ export function ContentDetailPage() {
         <div className="flex items-center gap-3 self-start sm:self-auto">
           <button
             type="button"
-            disabled={reviewRunning || !latestRevision}
+            disabled={loading || reviewRunning || !latestRevision}
             onClick={handleRunReview}
             className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -422,64 +417,85 @@ export function ContentDetailPage() {
         </div>
       )}
 
-      {/* Metadata Grid */}
+      {/* Metadata Grid (Render skeleton immediately while loading, Requirement 4) */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-sm">
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
             Channel
           </span>
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
-            {content.channel}
-          </span>
+          {loading ? (
+            <div className="h-5 w-20 bg-slate-200 rounded animate-pulse" />
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
+              {content?.channel}
+            </span>
+          )}
         </div>
 
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
             Created By
           </span>
-          <span className="text-sm font-medium text-slate-800">
-            {content.created_by_name || "Unknown"}
-          </span>
+          {loading ? (
+            <div className="h-5 w-28 bg-slate-200 rounded animate-pulse" />
+          ) : (
+            <span className="text-sm font-medium text-slate-800">
+              {content?.created_by_name || "Unknown"}
+            </span>
+          )}
         </div>
 
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
             Target Audience
           </span>
-          <span className="text-sm text-slate-700">{content.audience}</span>
+          {loading ? (
+            <div className="h-5 w-36 bg-slate-200 rounded animate-pulse" />
+          ) : (
+            <span className="text-sm text-slate-700">{content?.audience}</span>
+          )}
         </div>
 
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
             Last Updated
           </span>
-          <span className="text-sm text-slate-700">
-            {new Date(content.updated_at).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
+          {loading ? (
+            <div className="h-5 w-24 bg-slate-200 rounded animate-pulse" />
+          ) : (
+            <span className="text-sm text-slate-700">
+              {content &&
+                new Date(content.updated_at).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+            </span>
+          )}
         </div>
 
         <div className="sm:col-span-2 md:col-span-4 pt-3 border-t border-slate-100">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
             Campaign Purpose
           </span>
-          <p className="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">
-            "{content.purpose}"
-          </p>
+          {loading ? (
+            <div className="h-10 w-full bg-slate-100 rounded-lg animate-pulse" />
+          ) : (
+            <p className="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">
+              "{content?.purpose}"
+            </p>
+          )}
         </div>
       </div>
 
       {/* Summary Bar above content and findings */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
-        {reviewLoading ? (
-          <div className="text-xs font-medium text-slate-500 flex items-center gap-2">
-            <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-            Checking review status…
+        {loading || reviewLoading ? (
+          <div className="flex items-center justify-between gap-4">
+            <div className="h-5 w-48 bg-slate-200 rounded animate-pulse" />
+            <div className="h-5 w-36 bg-slate-100 rounded animate-pulse hidden sm:block" />
           </div>
         ) : review ? (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
@@ -543,9 +559,9 @@ export function ContentDetailPage() {
         )}
       </div>
 
-      {/* Main Review Workspace: Highlighted Copy & Finding Cards */}
+      {/* Main Review Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column (7 cols): Latest Revision Body with Highlights */}
+        {/* Left Column (7 cols): Latest Revision Body */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -567,7 +583,16 @@ export function ContentDetailPage() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
-            {renderHighlightedBody()}
+            {loading ? (
+              <div className="space-y-3 animate-pulse">
+                <div className="h-4 bg-slate-200 rounded w-full" />
+                <div className="h-4 bg-slate-200 rounded w-11/12" />
+                <div className="h-4 bg-slate-200 rounded w-4/5" />
+                <div className="h-4 bg-slate-200 rounded w-3/4" />
+              </div>
+            ) : (
+              renderHighlightedBody()
+            )}
 
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
               <span>
@@ -581,7 +606,7 @@ export function ContentDetailPage() {
             </div>
           </div>
 
-          {/* Older Revisions Section (Collapsed) */}
+          {/* Older Revisions Section */}
           {olderRevisions.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
               <details className="group">
@@ -631,7 +656,23 @@ export function ContentDetailPage() {
             </span>
           </div>
 
-          {findings.length === 0 ? (
+          {loading || reviewLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3 animate-pulse"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="h-5 w-20 bg-slate-200 rounded" />
+                    <div className="h-4 w-16 bg-slate-100 rounded" />
+                  </div>
+                  <div className="h-7 w-3/4 bg-slate-100 rounded" />
+                  <div className="h-4 w-full bg-slate-100 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : findings.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
               <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
                 <svg
@@ -712,7 +753,7 @@ export function ContentDetailPage() {
                       </span>
                     </div>
 
-                    {/* Citation Line (Invariant 1: If rule_code is null, label as suggestion, not violation) */}
+                    {/* Citation Line */}
                     <div>
                       {finding.rule_code ? (
                         <div className="text-xs text-slate-700 bg-slate-100/70 border border-slate-200 rounded-lg p-2.5 space-y-0.5">

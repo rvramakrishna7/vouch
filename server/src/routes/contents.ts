@@ -185,7 +185,7 @@ contentsRouter.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/contents/:id/reviews/latest (any role that can see content)
+// GET /api/contents/:id/reviews/latest (optimized single-round-trip query)
 contentsRouter.get("/:id/reviews/latest", async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
   const id = String(req.params.id);
@@ -195,54 +195,103 @@ contentsRouter.get("/:id/reviews/latest", async (req: Request, res: Response) =>
   }
 
   try {
-    // Check content access
-    const { rows: contentRows } = await pool.query<{ id: string; created_by: string }>(
-      "SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2",
+    const { rows } = await pool.query<{
+      content_id: string;
+      content_created_by: string;
+      review: {
+        id: string;
+        organization_id: string;
+        revision_id: string;
+        provider: string;
+        model: string;
+        started_at: string;
+        finished_at?: string;
+        created_at: string;
+      } | null;
+      findings: any[] | null;
+    }>(
+      `SELECT 
+         c.id AS content_id,
+         c.created_by AS content_created_by,
+         (
+           SELECT json_build_object(
+             'id', rw.id,
+             'organization_id', rw.organization_id,
+             'revision_id', rw.revision_id,
+             'provider', rw.provider,
+             'model', rw.model,
+             'started_at', rw.started_at,
+             'finished_at', rw.finished_at,
+             'created_at', rw.created_at
+           )
+           FROM revisions rv
+           JOIN reviews rw ON rw.revision_id = rv.id
+           WHERE rv.content_id = c.id AND rw.organization_id = c.organization_id
+           ORDER BY rw.created_at DESC
+           LIMIT 1
+         ) AS review,
+         (
+           SELECT COALESCE(
+             json_agg(
+               json_build_object(
+                 'id', f.id,
+                 'organization_id', f.organization_id,
+                 'review_id', f.review_id,
+                 'kind', f.kind,
+                 'span_text', f.span_text,
+                 'start_offset', f.start_offset,
+                 'end_offset', f.end_offset,
+                 'verdict', f.verdict,
+                 'rule_id', f.rule_id,
+                 'rule_code', r.code,
+                 'rule_text', r.text,
+                 'reason', f.reason,
+                 'severity', f.severity,
+                 'confidence', f.confidence,
+                 'suggested_fix', f.suggested_fix,
+                 'resolution', f.resolution,
+                 'dismiss_reason', f.dismiss_reason,
+                 'created_at', f.created_at
+               ) ORDER BY f.start_offset ASC, f.id ASC
+             ),
+             '[]'::json
+           )
+           FROM (
+             SELECT rw.id, rw.organization_id
+             FROM revisions rv
+             JOIN reviews rw ON rw.revision_id = rv.id
+             WHERE rv.content_id = c.id AND rw.organization_id = c.organization_id
+             ORDER BY rw.created_at DESC
+             LIMIT 1
+           ) lr
+           JOIN findings f ON f.review_id = lr.id AND f.organization_id = lr.organization_id
+           LEFT JOIN rules r ON f.rule_id = r.id
+         ) AS findings
+       FROM contents c
+       WHERE c.id = $1 AND c.organization_id = $2`,
       [id, orgId],
     );
 
-    if (contentRows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    const content = contentRows[0];
-    if (req.user!.role === "creator" && content.created_by !== req.user!.id) {
+    const row = rows[0];
+
+    // Creator isolation check
+    if (req.user!.role === "creator" && row.content_created_by !== req.user!.id) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    // Get latest review for this content
-    const { rows: reviewRows } = await pool.query(
-      `SELECT rw.id, rw.organization_id, rw.revision_id, rw.provider, rw.model,
-              rw.started_at, rw.finished_at, rw.created_at
-       FROM reviews rw
-       JOIN revisions rv ON rw.revision_id = rv.id
-       WHERE rv.content_id = $1 AND rw.organization_id = $2
-       ORDER BY rw.created_at DESC
-       LIMIT 1`,
-      [id, orgId],
-    );
-
-    if (reviewRows.length === 0) {
+    // If content has not been reviewed yet
+    if (!row.review) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    const review = reviewRows[0];
-
-    // Join findings with rule_code and rule_text
-    const { rows: findings } = await pool.query(
-      `SELECT f.id, f.organization_id, f.review_id, f.kind, f.span_text,
-              f.start_offset, f.end_offset, f.verdict, f.rule_id,
-              r.code AS rule_code, r.text AS rule_text,
-              f.reason, f.severity, f.confidence, f.suggested_fix,
-              f.resolution, f.dismiss_reason, f.created_at
-       FROM findings f
-       LEFT JOIN rules r ON f.rule_id = r.id
-       WHERE f.review_id = $1 AND f.organization_id = $2
-       ORDER BY f.start_offset ASC, f.id ASC`,
-      [review.id, orgId],
-    );
-
-    return res.json({ review, findings });
+    return res.json({
+      review: row.review,
+      findings: row.findings || [],
+    });
   } catch (err) {
     console.error("GET /api/contents/:id/reviews/latest error:", err);
     return res.status(500).json({ error: "internal_error" });
@@ -259,12 +308,20 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. Verify content exists in org and user has access
+    // 1. In one round-trip: verify content access and fetch latest revision
     const { rows: contentRows } = await pool.query<{
       id: string;
       created_by: string;
+      revision_id: string;
+      revision_n: number;
+      revision_body: string;
     }>(
-      "SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2",
+      `SELECT c.id, c.created_by, r.id AS revision_id, r.n AS revision_n, r.body AS revision_body
+       FROM contents c
+       JOIN revisions r ON r.content_id = c.id AND r.organization_id = c.organization_id
+       WHERE c.id = $1 AND c.organization_id = $2
+       ORDER BY r.n DESC
+       LIMIT 1`,
       [id, orgId],
     );
 
@@ -277,49 +334,31 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "not_found" });
     }
 
-    // 2. Fetch latest revision
-    const { rows: revisionRows } = await pool.query<{
-      id: string;
-      n: number;
-      body: string;
-    }>(
-      `SELECT id, n, body
-       FROM revisions
-       WHERE content_id = $1 AND organization_id = $2
-       ORDER BY n DESC
-       LIMIT 1`,
-      [id, orgId],
-    );
+    // 2. Fetch rules and terms in parallel
+    const [rulesRes, termsRes] = await Promise.all([
+      pool.query<RuleInput>(
+        `SELECT id, code, category, severity, text, status
+         FROM rules
+         WHERE organization_id = $1`,
+        [orgId],
+      ),
+      pool.query<TermInput>(
+        `SELECT t.id, t.term, t.type, t.replacement, t.rule_id, r.code AS rule_code, t.note
+         FROM terms t
+         LEFT JOIN rules r ON t.rule_id = r.id
+         WHERE t.organization_id = $1`,
+        [orgId],
+      ),
+    ]);
 
-    if (revisionRows.length === 0) {
-      return res.status(404).json({ error: "not_found" });
-    }
-
-    const latestRevision = revisionRows[0];
-
-    // 3. Fetch rules and terms for this organization
-    const { rows: rules } = await pool.query<RuleInput>(
-      `SELECT id, code, category, severity, text, status
-       FROM rules
-       WHERE organization_id = $1`,
-      [orgId],
-    );
-
-    const { rows: terms } = await pool.query<TermInput>(
-      `SELECT t.id, t.term, t.type, t.replacement, t.rule_id, r.code AS rule_code, t.note
-       FROM terms t
-       LEFT JOIN rules r ON t.rule_id = r.id
-       WHERE t.organization_id = $1`,
-      [orgId],
-    );
-
-    // Map rule_code -> rule_id
+    const rules = rulesRes.rows;
+    const terms = termsRes.rows;
     const ruleCodeToId = new Map(rules.map((r) => [r.code, r.id]));
 
-    // 4. Run pure rule checks
-    const computedFindings = runRuleChecks(latestRevision.body, { rules, terms });
+    // 3. Run pure rule checks
+    const computedFindings = runRuleChecks(content.revision_body, { rules, terms });
 
-    // 5. In one transaction: save review, findings, and audit log
+    // 4. In one transaction: save review, batch insert findings, and audit log
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -328,24 +367,25 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
         `INSERT INTO reviews (organization_id, revision_id, provider, model, started_at, finished_at)
          VALUES ($1, $2, 'rules', 'vouch-rules-v1', now(), now())
          RETURNING id, organization_id, revision_id, provider, model, started_at, finished_at, created_at`,
-        [orgId, latestRevision.id],
+        [orgId, content.revision_id],
       );
       const review = reviewRows[0];
 
-      for (const f of computedFindings) {
-        const resolvedRuleId = f.rule_code
-          ? (ruleCodeToId.get(f.rule_code) ?? null)
-          : null;
+      // Batch insert findings in one query if any findings exist
+      if (computedFindings.length > 0) {
+        const valueClauses: string[] = [];
+        const params: any[] = [orgId, review.id];
+        let paramIdx = 3;
 
-        await client.query(
-          `INSERT INTO findings (
-             organization_id, review_id, kind, span_text, start_offset, end_offset,
-             verdict, rule_id, reason, severity, confidence, suggested_fix
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11)`,
-          [
-            orgId,
-            review.id,
+        for (const f of computedFindings) {
+          const resolvedRuleId = f.rule_code
+            ? (ruleCodeToId.get(f.rule_code) ?? null)
+            : null;
+
+          valueClauses.push(
+            `($1, $2, $${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, NULL, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8})`,
+          );
+          params.push(
             f.kind,
             f.span_text,
             f.start_offset,
@@ -355,7 +395,17 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
             f.severity,
             f.confidence,
             f.suggested_fix,
-          ],
+          );
+          paramIdx += 9;
+        }
+
+        await client.query(
+          `INSERT INTO findings (
+             organization_id, review_id, kind, span_text, start_offset, end_offset,
+             verdict, rule_id, reason, severity, confidence, suggested_fix
+           )
+           VALUES ${valueClauses.join(", ")}`,
+          params,
         );
       }
 
@@ -366,7 +416,7 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
         entity: `review:${review.id}`,
         payload: {
           content_id: content.id,
-          revision_id: latestRevision.id,
+          revision_id: content.revision_id,
           findings_count: computedFindings.length,
         },
         client,
@@ -401,7 +451,7 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/contents/:id (all roles, but creators can only view own)
+// GET /api/contents/:id (optimized single-round-trip with revisions aggregated)
 contentsRouter.get("/:id", async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
   const id = String(req.params.id);
@@ -411,7 +461,7 @@ contentsRouter.get("/:id", async (req: Request, res: Response) => {
   }
 
   try {
-    const { rows: contentRows } = await pool.query(
+    const { rows } = await pool.query(
       `SELECT 
          c.id,
          c.organization_id,
@@ -423,43 +473,43 @@ contentsRouter.get("/:id", async (req: Request, res: Response) => {
          c.created_by,
          COALESCE(u.name, '') AS created_by_name,
          c.created_at,
-         c.updated_at
+         c.updated_at,
+         COALESCE(
+           (
+             SELECT json_agg(
+               json_build_object(
+                 'id', r.id,
+                 'n', r.n,
+                 'body', r.body,
+                 'created_by', r.created_by,
+                 'created_by_name', COALESCE(ru.name, ''),
+                 'created_at', r.created_at
+               ) ORDER BY r.n DESC
+             )
+             FROM revisions r
+             LEFT JOIN users ru ON r.created_by = ru.id
+             WHERE r.content_id = c.id AND r.organization_id = c.organization_id
+           ),
+           '[]'::json
+         ) AS revisions
        FROM contents c
        LEFT JOIN users u ON c.created_by = u.id
        WHERE c.id = $1 AND c.organization_id = $2`,
       [id, orgId],
     );
 
-    if (contentRows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    const content = contentRows[0];
+    const content = rows[0];
 
     // If role is creator, they can only view content they created
     if (req.user!.role === "creator" && content.created_by !== req.user!.id) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    const { rows: revisionRows } = await pool.query(
-      `SELECT 
-         r.id,
-         r.n,
-         r.body,
-         r.created_by,
-         COALESCE(u.name, '') AS created_by_name,
-         r.created_at
-       FROM revisions r
-       LEFT JOIN users u ON r.created_by = u.id
-       WHERE r.content_id = $1 AND r.organization_id = $2
-       ORDER BY r.n DESC`,
-      [id, orgId],
-    );
-
-    return res.json({
-      ...content,
-      revisions: revisionRows,
-    });
+    return res.json(content);
   } catch (err) {
     console.error("GET /api/contents/:id error:", err);
     return res.status(500).json({ error: "internal_error" });
