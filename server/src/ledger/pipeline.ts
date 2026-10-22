@@ -86,6 +86,22 @@ export function dedupePunctuation(replacement: string, nextChar?: string): strin
   return replacement;
 }
 
+export function isSentenceStart(text: string, offset: number): boolean {
+  if (offset === 0) return true;
+  if (offset >= 2) {
+    const prev2 = text.slice(offset - 2, offset);
+    if (prev2 === ". " || prev2 === "! " || prev2 === "? ") {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function capitalizeFirstLetter(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export function extractNumbers(text: string): number[] {
   const matches = text.match(/\b\d+(?:\.\d+)?\b/g);
   if (!matches) return [];

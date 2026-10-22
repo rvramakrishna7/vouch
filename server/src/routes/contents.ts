@@ -11,7 +11,13 @@ import {
   type RuleInput,
   type TermInput,
 } from "../engine/ruleChecks.js";
-import { runClaimLedger, type ValidatedClaimFinding, dedupePunctuation } from "../ledger/pipeline.js";
+import {
+  runClaimLedger,
+  type ValidatedClaimFinding,
+  dedupePunctuation,
+  isSentenceStart,
+  capitalizeFirstLetter,
+} from "../ledger/pipeline.js";
 import { timingStorage } from "../middleware/timing.js";
 
 export const contentsRouter = Router();
@@ -490,7 +496,7 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
                 f.start_offset, f.end_offset, f.verdict,
                 f.rule_id, r.code AS rule_code, r.text AS rule_text,
                 f.fact_id, fa.code AS fact_code, fa.statement AS fact_statement, fa.valid_until AS fact_valid_until,
-                f.reason, f.severity, f.confidence, f.suggested_fix,
+                f.reason, f.severity, f.confidence, f.suggested_fix, f.replacement_text,
                 f.resolution, f.dismiss_reason, f.created_at
          FROM findings f
          LEFT JOIN rules r ON f.rule_id = r.id
@@ -581,6 +587,9 @@ contentsRouter.get("/:id", async (req: Request, res: Response) => {
 const createRevisionSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("apply_fixes"),
+  }),
+  z.object({
+    mode: z.literal("preview"),
   }),
   z.object({
     mode: z.literal("manual"),
@@ -771,14 +780,22 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
       } else {
         applied.push(candidate.id);
         appliedSpans.push({ start: candidate.start_offset, end: candidate.end_offset });
+        let replacement = candidate.replacement;
+        if (isSentenceStart(latestRev.body, candidate.start_offset)) {
+          replacement = capitalizeFirstLetter(replacement);
+        }
         const nextChar = latestRev.body[candidate.end_offset];
-        const cleanReplacement = dedupePunctuation(candidate.replacement, nextChar);
+        const cleanReplacement = dedupePunctuation(replacement, nextChar);
         newBody = newBody.slice(0, candidate.start_offset) + cleanReplacement + newBody.slice(candidate.end_offset);
       }
     }
 
     if (applied.length === 0) {
       return res.status(400).json({ error: "nothing_to_apply", skipped });
+    }
+
+    if (mode === "preview") {
+      return res.json({ body: newBody, applied, skipped });
     }
 
     // Insert revision n+1 in transaction

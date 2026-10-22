@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
+import { diffWords } from "diff";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { useAuth } from "../auth/AuthContext.js";
@@ -62,7 +63,8 @@ interface Finding {
   severity: "high" | "medium" | "low";
   confidence: number;
   suggested_fix?: string | null;
-  resolution?: string;
+  replacement_text?: string | null;
+  resolution?: string | null;
   dismiss_reason?: string | null;
   created_at: string;
 }
@@ -137,6 +139,42 @@ const VERDICT_META: Record<
   },
 };
 
+/**
+ * Word-level diff renderer using the diff package
+ * Removed text: red strikethrough
+ * Added text: green
+ */
+function WordDiff({ oldText, newText }: { oldText: string; newText: string }) {
+  const parts = diffWords(oldText, newText);
+  return (
+    <div className="font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+      {parts.map((part, index) => {
+        if (part.added) {
+          return (
+            <ins
+              key={index}
+              className="bg-emerald-100 text-emerald-950 no-underline font-semibold px-0.5 rounded border border-emerald-300"
+            >
+              {part.value}
+            </ins>
+          );
+        }
+        if (part.removed) {
+          return (
+            <del
+              key={index}
+              className="bg-rose-100 text-rose-950 line-through px-0.5 rounded border border-rose-300"
+            >
+              {part.value}
+            </del>
+          );
+        }
+        return <span key={index}>{part.value}</span>;
+      })}
+    </div>
+  );
+}
+
 export function ContentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -153,6 +191,41 @@ export function ContentDetailPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null);
+
+  // Resolution states
+  const [activeEditId, setActiveEditId] = useState<string | null>(null);
+  const [editInputText, setEditInputText] = useState("");
+  const [activeDismissId, setActiveDismissId] = useState<string | null>(null);
+  const [dismissInputReason, setDismissInputReason] = useState("");
+  const [activeChangeId, setActiveChangeId] = useState<string | null>(null);
+  const [resolvingFindingId, setResolvingFindingId] = useState<string | null>(null);
+
+  // Stale review alert (409)
+  const [staleReviewAlert, setStaleReviewAlert] = useState(false);
+
+  // Action error message
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Preview modal states
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    body: string;
+    applied: any[];
+    skipped: any[];
+  } | null>(null);
+  const [applyingFixes, setApplyingFixes] = useState(false);
+
+  // Manual edit modal states
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualBody, setManualBody] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
+
+  // Banner after revision creation
+  const [createdRevisionBanner, setCreatedRevisionBanner] = useState<{ n: number } | null>(null);
+
+  // Interactive revision history selected revision
+  const [selectedHistoryRevN, setSelectedHistoryRevN] = useState<number | null>(null);
 
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -225,6 +298,8 @@ export function ContentDetailPage() {
     if (!id || reviewRunning) return;
     setReviewRunning(true);
     setReviewError(null);
+    setStaleReviewAlert(false);
+    setCreatedRevisionBanner(null);
     try {
       const res = await apiFetch<{ review: Review; findings: Finding[] }>(
         `/api/contents/${id}/reviews`,
@@ -248,6 +323,7 @@ export function ContentDetailPage() {
 
   const handleHighlightClick = (findingId: string) => {
     setHighlightedFindingId(findingId);
+
     const cardEl = document.getElementById(`finding-card-${findingId}`);
     if (cardEl) {
       cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -259,6 +335,208 @@ export function ContentDetailPage() {
     highlightTimeoutRef.current = setTimeout(() => {
       setHighlightedFindingId(null);
     }, 2500);
+  };
+
+  // Resolution Actions
+  const handleResolve = async (
+    findingId: string,
+    action: "accept" | "edit" | "dismiss",
+    text?: string,
+    reason?: string,
+  ) => {
+    setResolvingFindingId(findingId);
+    setActionError(null);
+    try {
+      const res = await apiFetch<{
+        finding?: Finding;
+        id?: string;
+        resolution: string;
+        replacement_text?: string | null;
+        dismiss_reason?: string | null;
+      }>(`/api/findings/${findingId}/resolution`, {
+        method: "PATCH",
+        body: JSON.stringify({ action, text, reason }),
+      });
+
+      const updatedResolution =
+        res.resolution ||
+        (action === "accept"
+          ? "accepted"
+          : action === "edit"
+          ? "edited"
+          : "dismissed");
+      const updatedReplacement =
+        res.replacement_text ?? (action === "edit" ? text : null);
+      const updatedDismiss =
+        res.dismiss_reason ?? (action === "dismiss" ? reason : null);
+
+      setFindings((prev) =>
+        prev.map((f) =>
+          f.id === findingId
+            ? {
+                ...f,
+                resolution: updatedResolution,
+                replacement_text: updatedReplacement,
+                dismiss_reason: updatedDismiss,
+              }
+            : f,
+        ),
+      );
+
+      setActiveEditId(null);
+      setActiveDismissId(null);
+      setActiveChangeId(null);
+    } catch (err) {
+      console.error("Resolution failed:", err);
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.message === "stale_review")
+      ) {
+        setStaleReviewAlert(true);
+        setActionError("This review is for an older revision. Run a new review first.");
+      } else if (err instanceof ApiError) {
+        setActionError(`Failed to save resolution: ${err.message}`);
+      } else {
+        setActionError("Failed to update finding resolution.");
+      }
+    } finally {
+      setResolvingFindingId(null);
+    }
+  };
+
+  const startEdit = (finding: Finding) => {
+    setActiveEditId(finding.id);
+    setActiveDismissId(null);
+    setActiveChangeId(null);
+    setEditInputText(
+      finding.replacement_text ||
+        finding.suggested_fix ||
+        finding.span_text ||
+        "",
+    );
+  };
+
+  const startDismiss = (finding: Finding) => {
+    setActiveDismissId(finding.id);
+    setActiveEditId(null);
+    setActiveChangeId(null);
+    setDismissInputReason(finding.dismiss_reason || "");
+  };
+
+  const startChange = (findingId: string) => {
+    setActiveChangeId(findingId);
+    setActiveEditId(null);
+    setActiveDismissId(null);
+  };
+
+  // Preview fixes modal
+  const handlePreviewChanges = async () => {
+    if (!id || !latestRevision) return;
+    setPreviewLoading(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch<{
+        body: string;
+        applied: any[];
+        skipped: any[];
+      }>(`/api/contents/${id}/revisions`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "preview" }),
+      });
+      setPreviewData(res);
+      setPreviewModalOpen(true);
+    } catch (err) {
+      console.error("Preview failed:", err);
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.message === "stale_review")
+      ) {
+        setStaleReviewAlert(true);
+        setActionError("This review is for an older revision. Run a new review first.");
+      } else if (err instanceof ApiError) {
+        setActionError(`Failed to preview changes: ${err.message}`);
+      } else {
+        setActionError("Failed to generate preview.");
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleApplyFixes = async () => {
+    if (!id) return;
+    setApplyingFixes(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch<{
+        revision: Revision;
+        applied: any[];
+        skipped: any[];
+      }>(`/api/contents/${id}/revisions`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "apply_fixes" }),
+      });
+      setPreviewModalOpen(false);
+      setPreviewData(null);
+      setCreatedRevisionBanner({ n: res.revision.n });
+      await fetchAll();
+    } catch (err) {
+      console.error("Apply fixes failed:", err);
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.message === "stale_review")
+      ) {
+        setStaleReviewAlert(true);
+        setPreviewModalOpen(false);
+        setActionError("This review is for an older revision. Run a new review first.");
+      } else if (err instanceof ApiError) {
+        setActionError(`Failed to apply fixes: ${err.message}`);
+      } else {
+        setActionError("Failed to create revision from fixes.");
+      }
+    } finally {
+      setApplyingFixes(false);
+    }
+  };
+
+  // Manual edit
+  const handleOpenManualEdit = () => {
+    if (!latestRevision) return;
+    setManualBody(latestRevision.body);
+    setManualModalOpen(true);
+  };
+
+  const handleSaveManual = async () => {
+    if (!id || !manualBody.trim()) return;
+    setSavingManual(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch<{
+        revision: Revision;
+      }>(`/api/contents/${id}/revisions`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "manual", body: manualBody }),
+      });
+      setManualModalOpen(false);
+      setCreatedRevisionBanner({ n: res.revision.n });
+      await fetchAll();
+    } catch (err) {
+      console.error("Manual revision save failed:", err);
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 || err.message === "stale_review")
+      ) {
+        setStaleReviewAlert(true);
+        setManualModalOpen(false);
+        setActionError("This review is for an older revision. Run a new review first.");
+      } else if (err instanceof ApiError) {
+        setActionError(`Failed to save revision: ${err.message}`);
+      } else {
+        setActionError("Failed to create manual revision.");
+      }
+    } finally {
+      setSavingManual(false);
+    }
   };
 
   const backLink = user?.role === "creator" ? "/content" : "/reviews";
@@ -291,7 +569,7 @@ export function ContentDetailPage() {
   }
 
   const latestRevision = content?.revisions?.[0];
-  const olderRevisions = (content?.revisions ?? []).slice(1);
+  const nextRevisionN = (latestRevision?.n ?? 0) + 1;
 
   // Group findings into claims vs rule-based findings
   const claimFindings = findings.filter((f) => f.kind === "claim");
@@ -303,6 +581,25 @@ export function ContentDetailPage() {
   const contradictedCount = claimFindings.filter((f) => f.verdict === "contradicted").length;
   const unsupportedCount = claimFindings.filter((f) => f.verdict === "unsupported").length;
   const needsHumanCount = claimFindings.filter((f) => f.verdict === "needs_human_judgement").length;
+
+  // Permissions check
+  const isCreatorOwner = Boolean(
+    user?.role === "creator" && content && user?.id === content.created_by,
+  );
+  const isLatestReview = Boolean(
+    review && latestRevision && review.revision_id === latestRevision.id,
+  );
+  const canResolve = Boolean(isCreatorOwner && isLatestReview && !staleReviewAlert);
+
+  // Ready fixes count (accepted + edited)
+  const readyFindings = findings.filter(
+    (f) =>
+      f.resolution === "accepted" ||
+      f.resolution === "accept" ||
+      f.resolution === "edited" ||
+      f.resolution === "edit",
+  );
+  const readyCount = readyFindings.length;
 
   // Build highlighted text segments
   const renderHighlightedBody = () => {
@@ -408,6 +705,191 @@ export function ContentDetailPage() {
     );
   };
 
+  /**
+   * Render resolution controls and badges for findings
+   * Supported claims cannot be resolved.
+   * Creator owner sees action buttons; reviewers/brand managers see read-only badges.
+   */
+  const renderFindingResolution = (finding: Finding) => {
+    // Supported claims cannot be resolved
+    if (finding.verdict === "supported") {
+      return null;
+    }
+
+    const hasResolution = Boolean(finding.resolution);
+    const isChanging = activeChangeId === finding.id;
+    const isResolving = resolvingFindingId === finding.id;
+
+    // Show badge if resolved and not actively changing
+    if (hasResolution && !isChanging) {
+      let badge = null;
+      if (finding.resolution === "accepted" || finding.resolution === "accept") {
+        badge = (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+            &check; Accepted
+          </span>
+        );
+      } else if (finding.resolution === "edited" || finding.resolution === "edit") {
+        badge = (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300 max-w-full truncate">
+            &#9998; Edited: "{finding.replacement_text || finding.suggested_fix}"
+          </span>
+        );
+      } else if (
+        finding.resolution === "dismissed" ||
+        finding.resolution === "dismiss"
+      ) {
+        badge = (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 max-w-full truncate">
+            &times; Dismissed: "{finding.dismiss_reason}"
+          </span>
+        );
+      }
+
+      return (
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">{badge}</div>
+          {canResolve && (
+            <button
+              type="button"
+              onClick={() => startChange(finding.id)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-900 underline cursor-pointer shrink-0"
+            >
+              Change
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // If cannot resolve (other roles or stale review), do not show action buttons
+    if (!canResolve) {
+      return null;
+    }
+
+    // Inline edit mode
+    if (activeEditId === finding.id) {
+      return (
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+            Replacement Text
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editInputText}
+              onChange={(e) => setEditInputText(e.target.value)}
+              placeholder="Enter replacement text..."
+              className="flex-1 text-xs font-mono px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              autoFocus
+            />
+            <button
+              type="button"
+              disabled={isResolving || !editInputText.trim()}
+              onClick={() => handleResolve(finding.id, "edit", editInputText)}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              {isResolving ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveEditId(null);
+                if (isChanging) setActiveChangeId(null);
+              }}
+              className="px-2 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer shrink-0"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Inline dismiss mode
+    if (activeDismissId === finding.id) {
+      const isValid = dismissInputReason.trim().length >= 5;
+      return (
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+            Reason for Dismissing (min 5 characters)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={dismissInputReason}
+              onChange={(e) => setDismissInputReason(e.target.value)}
+              placeholder="E.g. Approved brand exception..."
+              className="flex-1 text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              autoFocus
+            />
+            <button
+              type="button"
+              disabled={isResolving || !isValid}
+              onClick={() =>
+                handleResolve(finding.id, "dismiss", undefined, dismissInputReason)
+              }
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              {isResolving ? "Saving..." : "Confirm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveDismissId(null);
+                if (isChanging) setActiveChangeId(null);
+              }}
+              className="px-2 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer shrink-0"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Action buttons row (Accept fix / Edit / Dismiss)
+    return (
+      <div className="pt-2 border-t border-slate-100 flex items-center flex-wrap gap-2">
+        {finding.suggested_fix && (
+          <button
+            type="button"
+            disabled={isResolving}
+            onClick={() => handleResolve(finding.id, "accept")}
+            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            {isResolving ? "Accepting..." : "Accept fix"}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={isResolving}
+          onClick={() => startEdit(finding)}
+          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          disabled={isResolving}
+          onClick={() => startDismiss(finding)}
+          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
+        >
+          Dismiss
+        </button>
+        {isChanging && (
+          <button
+            type="button"
+            onClick={() => setActiveChangeId(null)}
+            className="text-xs text-slate-400 hover:text-slate-600 underline ml-auto cursor-pointer"
+          >
+            Keep current
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Top Breadcrumb & Action banner */}
@@ -468,7 +950,7 @@ export function ContentDetailPage() {
         </div>
       </div>
 
-      {/* Progress Line while Review Runs (Requirement 6) */}
+      {/* Progress Line while Review Runs */}
       {reviewRunning && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-sm text-sm text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -482,7 +964,77 @@ export function ContentDetailPage() {
         </div>
       )}
 
-      {/* Error / Warning Banners */}
+      {/* Revision Created Banner (Requirement 5) */}
+      {createdRevisionBanner && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-sm text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+              &check;
+            </span>
+            <span className="font-semibold">
+              Revision {createdRevisionBanner.n} created. Run Vouch review again to check the new text.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCreatedRevisionBanner(null);
+              handleRunReview();
+            }}
+            disabled={reviewRunning}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
+          >
+            Run review &rarr;
+          </button>
+        </div>
+      )}
+
+      {/* Stale Review 409 Banner (Requirement 8) */}
+      {staleReviewAlert && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <svg
+              className="w-5 h-5 text-amber-600 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span className="font-semibold">
+              This review is for an older revision. Run a new review first.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRunReview}
+            disabled={reviewRunning}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
+          >
+            Run new review &rarr;
+          </button>
+        </div>
+      )}
+
+      {/* Action / Review Errors */}
+      {actionError && !staleReviewAlert && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-800 flex items-center justify-between shadow-sm">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-xs underline font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {reviewError && (
         <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
           <span>{reviewError}</span>
@@ -496,7 +1048,7 @@ export function ContentDetailPage() {
         </div>
       )}
 
-      {/* Amber Banner when AI check is unavailable (Requirement 5) */}
+      {/* Amber Banner when AI check is unavailable */}
       {review && review.ai_status && review.ai_status !== "ok" && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900 flex items-start gap-3">
           <svg
@@ -594,7 +1146,7 @@ export function ContentDetailPage() {
         </div>
       </div>
 
-      {/* Summary Bar above content and findings (Requirement 4) */}
+      {/* Summary Bar above content and findings */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-2">
         {loading || reviewLoading ? (
           <div className="flex items-center justify-between gap-4">
@@ -676,93 +1228,237 @@ export function ContentDetailPage() {
 
       {/* Main Review Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column (6 cols): Latest Revision Body */}
-        <div className="lg:col-span-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-slate-900">
-                Draft Body
-              </h2>
-              {latestRevision && (
-                <span className="font-mono text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                  Revision {latestRevision.n}
-                </span>
-              )}
-            </div>
-
-            {latestRevision && (
-              <span className="text-xs text-slate-400">
-                {latestRevision.body.length.toLocaleString()} characters
-              </span>
-            )}
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
-            {loading ? (
-              <div className="space-y-3 animate-pulse">
-                <div className="h-4 bg-slate-200 rounded w-full" />
-                <div className="h-4 bg-slate-200 rounded w-11/12" />
-                <div className="h-4 bg-slate-200 rounded w-4/5" />
-                <div className="h-4 bg-slate-200 rounded w-3/4" />
-              </div>
-            ) : (
-              renderHighlightedBody()
-            )}
-
-            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-              <span>
-                Author: {latestRevision?.created_by_name || "Unknown"}
-              </span>
-              {findings.length > 0 && (
-                <span className="italic text-slate-500">
-                  Tip: Click highlighted text to inspect evidence.
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Older Revisions Section */}
-          {olderRevisions.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-              <details className="group">
-                <summary className="cursor-pointer font-semibold text-sm text-slate-700 hover:text-slate-900 select-none flex items-center justify-between">
-                  <span>Previous Revisions ({olderRevisions.length})</span>
-                  <span className="text-xs text-slate-400 group-open:rotate-180 transition-transform">
-                    &#9660;
+        {/* Left Column (6 cols): Latest Revision Body + Revision History */}
+        <div className="lg:col-span-6 space-y-6">
+          {/* Draft Body */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900">
+                  Draft Body
+                </h2>
+                {latestRevision && (
+                  <span className="font-mono text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    Revision {latestRevision.n}
                   </span>
-                </summary>
+                )}
+              </div>
 
-                <div className="mt-4 space-y-4 divide-y divide-slate-100 pt-2">
-                  {olderRevisions.map((rev) => (
-                    <div key={rev.id || rev.n} className="pt-4 first:pt-0 space-y-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-semibold text-slate-700">
-                          Revision {rev.n}
-                        </span>
-                        <span>
-                          {new Date(rev.created_at).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-700 font-mono whitespace-pre-wrap border border-slate-200">
-                        {rev.body}
-                      </div>
-                    </div>
-                  ))}
+              {latestRevision && (
+                <span className="text-xs text-slate-400">
+                  {latestRevision.body.length.toLocaleString()} characters
+                </span>
+              )}
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
+              {loading ? (
+                <div className="space-y-3 animate-pulse">
+                  <div className="h-4 bg-slate-200 rounded w-full" />
+                  <div className="h-4 bg-slate-200 rounded w-11/12" />
+                  <div className="h-4 bg-slate-200 rounded w-4/5" />
+                  <div className="h-4 bg-slate-200 rounded w-3/4" />
                 </div>
-              </details>
+              ) : (
+                renderHighlightedBody()
+              )}
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+                <span>
+                  Author: {latestRevision?.created_by_name || "Unknown"}
+                </span>
+                {findings.length > 0 && (
+                  <span className="italic text-slate-500">
+                    Tip: Click highlighted text to inspect evidence.
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Revision History (Requirement 7) */}
+          {content && content.revisions && content.revisions.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <span>Revision History</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      {content.revisions.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Click a revision to view its changes against the previous revision.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {content.revisions.map((rev) => {
+                  const isExpanded = selectedHistoryRevN === rev.n;
+                  const isLatest = latestRevision && rev.n === latestRevision.n;
+                  const prevRev = content.revisions.find((r) => r.n === rev.n - 1);
+
+                  return (
+                    <div
+                      key={rev.id || rev.n}
+                      className={`border rounded-xl overflow-hidden transition-all ${
+                        isExpanded
+                          ? "border-slate-900 ring-1 ring-slate-900 bg-slate-50/50"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedHistoryRevN((curr) =>
+                            curr === rev.n ? null : rev.n,
+                          )
+                        }
+                        className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-semibold text-sm text-slate-900">
+                            Revision {rev.n}
+                          </span>
+                          {isLatest && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                              Latest
+                            </span>
+                          )}
+                          {rev.n === 1 && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                              Initial revision
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          <span>{rev.created_by_name || "Unknown"}</span>
+                          <span>&bull;</span>
+                          <span>
+                            {new Date(rev.created_at).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <span
+                            className={`transition-transform text-slate-400 font-bold ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          >
+                            &#9660;
+                          </span>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="p-4 pt-0 border-t border-slate-100 space-y-3 mt-2">
+                          {rev.n > 1 && prevRev ? (
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Changes from Revision {prevRev.n}
+                              </span>
+                              <WordDiff oldText={prevRev.body} newText={rev.body} />
+                              <details className="text-xs text-slate-500">
+                                <summary className="cursor-pointer hover:text-slate-800 font-semibold select-none">
+                                  View full body of Revision {rev.n}
+                                </summary>
+                                <div className="mt-2 p-3 bg-white border border-slate-200 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800">
+                                  {rev.body}
+                                </div>
+                              </details>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Initial Revision Text
+                              </span>
+                              <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800">
+                                {rev.body}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Right Column (6 cols): Claim Ledger + Rule Findings */}
+        {/* Right Column (6 cols): Apply Fixes Bar + Claim Ledger + Rule Findings */}
         <div className="lg:col-span-6 space-y-6">
-          {/* SECTION 1: Claim Ledger (Requirement 2) */}
+          {/* Creator Apply Fixes Bar (Requirement 4 & 6) */}
+          {isCreatorOwner && isLatestReview && (
+            <div className="bg-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    readyCount > 0 ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                  }`}
+                />
+                <div>
+                  <span className="font-semibold text-sm block">
+                    {readyCount} {readyCount === 1 ? "fix" : "fixes"} ready
+                  </span>
+                  {readyCount > 0 ? (
+                    <span className="text-xs text-slate-300">
+                      {
+                        readyFindings.filter(
+                          (f) =>
+                            f.resolution === "accepted" || f.resolution === "accept",
+                        ).length
+                      }{" "}
+                      accepted,{" "}
+                      {
+                        readyFindings.filter(
+                          (f) =>
+                            f.resolution === "edited" || f.resolution === "edit",
+                        ).length
+                      }{" "}
+                      edited
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">
+                      Accept or edit fixes below to apply
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleOpenManualEdit}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                >
+                  Edit text manually
+                </button>
+                <button
+                  type="button"
+                  disabled={readyCount === 0 || previewLoading}
+                  onClick={handlePreviewChanges}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  {previewLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Previewing...</span>
+                    </>
+                  ) : (
+                    <span>Preview changes &rarr;</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 1: Claim Ledger */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -856,7 +1552,10 @@ export function ContentDetailPage() {
                               </span>
                               {finding.fact_valid_until && (
                                 <span className="text-[11px] font-medium text-slate-500">
-                                  Valid until: {new Date(finding.fact_valid_until).toLocaleDateString(undefined, {
+                                  Valid until:{" "}
+                                  {new Date(
+                                    finding.fact_valid_until,
+                                  ).toLocaleDateString(undefined, {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
@@ -898,11 +1597,14 @@ export function ContentDetailPage() {
                           </span>
                         </div>
                       )}
+
+                      {/* Resolution controls (Accept / Edit / Dismiss) or Badge */}
+                      {renderFindingResolution(finding)}
                     </div>
                   );
                 })}
 
-                {/* Verdict Legend (Requirement 7) */}
+                {/* Verdict Legend */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1.5 leading-relaxed">
                   <span className="font-bold text-slate-700">Verdicts:</span>
                   <span className="inline-flex items-center gap-1">
@@ -930,7 +1632,7 @@ export function ContentDetailPage() {
             )}
           </div>
 
-          {/* SECTION 2: Rule Guidelines & Other Findings (Terms, Tone, Accessibility) */}
+          {/* SECTION 2: Rule Guidelines & Other Findings */}
           <div className="space-y-3 pt-4 border-t border-slate-200">
             <div className="flex items-center justify-between">
               <div>
@@ -1033,6 +1735,9 @@ export function ContentDetailPage() {
                           </code>
                         </div>
                       )}
+
+                      {/* Resolution controls (Accept / Edit / Dismiss) or Badge */}
+                      {renderFindingResolution(finding)}
                     </div>
                   );
                 })}
@@ -1041,6 +1746,165 @@ export function ContentDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Preview Changes Modal (Requirement 4) */}
+      {previewModalOpen && previewData && latestRevision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Preview Changes (Revision {nextRevisionN})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Word-level diff of proposed changes against Revision {latestRevision.n}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                  Diff Preview
+                </span>
+                <WordDiff
+                  oldText={latestRevision.body}
+                  newText={previewData.body}
+                />
+              </div>
+
+              {/* Skipped fixes list */}
+              {previewData.skipped && previewData.skipped.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1.5">
+                  <span className="font-bold block">
+                    Skipped fixes ({previewData.skipped.length}):
+                  </span>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {previewData.skipped.map((s: any, idx: number) => (
+                      <li key={idx}>
+                        <span className="font-mono font-semibold">
+                          "{s.span_text}"
+                        </span>
+                        : overlaps another fix
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={applyingFixes}
+                onClick={() => setPreviewModalOpen(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={applyingFixes}
+                onClick={handleApplyFixes}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {applyingFixes ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Creating revision...</span>
+                  </>
+                ) : (
+                  <span>Create revision {nextRevisionN}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Edit Modal (Requirement 6) */}
+      {manualModalOpen && latestRevision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Edit Text Manually
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Directly edit draft body to create Revision {nextRevisionN}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  Draft Text
+                </label>
+                <textarea
+                  value={manualBody}
+                  onChange={(e) => setManualBody(e.target.value)}
+                  rows={7}
+                  className="w-full text-sm font-sans p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 leading-relaxed font-normal text-slate-800"
+                  placeholder="Edit draft text..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  Live Word-Level Diff
+                </span>
+                <WordDiff oldText={latestRevision.body} newText={manualBody} />
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={savingManual}
+                onClick={() => setManualModalOpen(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  savingManual ||
+                  manualBody === latestRevision.body ||
+                  !manualBody.trim()
+                }
+                onClick={handleSaveManual}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {savingManual ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Saving revision...</span>
+                  </>
+                ) : (
+                  <span>Save as revision {nextRevisionN}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
