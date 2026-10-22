@@ -716,12 +716,16 @@ export function ContentDetailPage() {
       return null;
     }
 
-    const hasResolution = Boolean(finding.resolution);
+    const hasResolution = Boolean(
+      finding.resolution && finding.resolution !== "open",
+    );
+    const isEditing = activeEditId === finding.id;
+    const isDismissing = activeDismissId === finding.id;
     const isChanging = activeChangeId === finding.id;
     const isResolving = resolvingFindingId === finding.id;
 
-    // Show badge if resolved and not actively changing
-    if (hasResolution && !isChanging) {
+    // Show badge if resolved and not actively changing, editing, or dismissing
+    if (hasResolution && !isChanging && !isEditing && !isDismissing) {
       let badge = null;
       if (finding.resolution === "accepted" || finding.resolution === "accept") {
         badge = (
