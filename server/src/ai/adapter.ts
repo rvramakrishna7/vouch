@@ -10,7 +10,7 @@ import {
 // Google Gemini: https://ai.google.dev/gemini-api/docs/models/gemini
 // Gemini Embeddings: https://ai.google.dev/gemini-api/docs/embeddings
 // Groq Models: https://console.groq.com/docs/models
-export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
 export const DEFAULT_GEMINI_EMBED_MODEL = "gemini-embedding-001";
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
