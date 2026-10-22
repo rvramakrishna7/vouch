@@ -78,7 +78,21 @@ AI adapter and Fact Embeddings (S7) completed and live:
 - AI Status API (`GET /api/ai/status`):
   - Secured with `requireAuth`. Verified live returning `{gemini: {ok: true, model: "gemini-3.5-flash"}, groq: {ok: true, model: "openai/gpt-oss-120b"}, embeddings: {ok: true, model: "gemini-embedding-001", dims: 768}}`.
 
-Claim Ledger pipeline (S8a & S8a.1) completed and live:
+Claim Ledger pipeline (S8a, S8a.1 & S8a.2) completed and live:
+- Stability & Deterministic Verification (S8a.2, DEC-022 Accepted, owner):
+  - Model configuration for ledger call: Groq (`openai/gpt-oss-120b`, `temperature: 0`) set as primary provider with Gemini fallback (8000ms timeout) via `LEDGER_PRIMARY_PROVIDER` (default "groq").
+  - Groq 429 resilience: if response header `retry-after` is <= 5s, waits and retries once on Groq before falling back.
+  - Regulated terms guard in code: if model says `supported` and quote contains a Brand Kit term of type `regulated`, overrides verdict to `needs_human_judgement` ("Regulated term: a reviewer must confirm the specific attribute is stated in the text.").
+  - Numeric cross-check in code: extracts number+unit pairs (%, hours, minutes, days, years, kg, g, ml, liters) from claim quote and candidate facts. If a fact has the same unit but none of its numbers equals the claim's number, overrides verdict to `contradicted` citing that fact and rule `CLAIM-03`.
+  - Benchmark (10 runs with 10s pause in normal mode):
+    - 10/10 runs completed with AI answers (0 provider outages)
+    - 10/10 runs scored 5/5 exact matches (100% per row across all 5 claims)
+    - Average AI latency: 3.35s (range 2.66s to 4.61s)
+  - Live API verification on seeded draft (`8c321adb-119b-403b-8b2a-2bdfb3fad344`):
+    - Run 1: Total time 5.44s (`ai;dur=4374.0, db;dur=162.6, total;dur=4989.1`, provider: groq `openai/gpt-oss-120b`) -> 5/5 correct
+    - Run 2: Total time 4.29s (`ai;dur=3313.0, db;dur=52.5, total;dur=3829.7`, provider: groq `openai/gpt-oss-120b`) -> 5/5 correct
+    - Run 3: Total time 3.47s (`ai;dur=2777.0, db;dur=99.9, total;dur=3370.7`, provider: groq `openai/gpt-oss-120b`) -> 5/5 correct
+  - Vitest test suite: 49/49 tests passing across 8 test suites.
 - Database: Migration `004_review_ai_columns.sql` applied to Supabase PostgreSQL, adding `ai_status`, `ai_provider`, `ai_model`, and `ai_latency_ms` to `reviews`.
 - Pipeline implementation (`server/src/ledger/`):
   - Sentence splitting with precise character offsets via native `Intl.Segmenter` (`server/src/ledger/sentences.ts`).
@@ -116,7 +130,7 @@ Claim Ledger pipeline (S8a & S8a.1) completed and live:
     - "now 40% lighter": `supported` (cites `F-12`, severity `low`)
     - "Rated 4.8 by our customers!": `outdated` (cites `F-03` + `CLAIM-03`)
     - "Keeps drinks cold for 48 hours.": `contradicted` (cites `F-15` + `CLAIM-03`, suggested fix: "Keeps drinks cold for 24 hours.")
-- Unit test suite: 46/46 tests passing across 8 test files in Vitest.
+- Unit test suite: 49/49 tests passing across 8 test files in Vitest.
 
 Verified row counts:
 - schema_migrations: 4
@@ -144,7 +158,7 @@ Verified row counts:
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
-| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) & latency | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency reduced from 17.6s to 2.2s with gemini-3.5-flash-lite, DEC-021) |
+| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency & stability | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022) |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
