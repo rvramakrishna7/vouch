@@ -10,7 +10,8 @@ import {
 // Google Gemini: https://ai.google.dev/gemini-api/docs/models/gemini
 // Gemini Embeddings: https://ai.google.dev/gemini-api/docs/embeddings
 // Groq Models: https://console.groq.com/docs/models
-export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
+export const DEFAULT_GEMINI_THINKING = "MINIMAL";
 export const DEFAULT_GEMINI_EMBED_MODEL = "gemini-embedding-001";
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
@@ -91,6 +92,13 @@ async function callGeminiRaw(
       ],
       generationConfig: {
         responseMimeType: "application/json",
+        ...( (process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING)
+          ? {
+              thinkingConfig: /^\d+$/.test(process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING)
+                ? { thinkingBudget: parseInt(process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING, 10) }
+                : { thinkingLevel: process.env.GEMINI_THINKING || DEFAULT_GEMINI_THINKING },
+            }
+          : {}),
       },
     }),
     signal: AbortSignal.timeout(timeoutMs),
@@ -153,6 +161,9 @@ async function callGroqRaw(
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
+      ...(process.env.GROQ_REASONING_EFFORT
+        ? { reasoning_effort: process.env.GROQ_REASONING_EFFORT }
+        : {}),
     }),
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -217,101 +228,122 @@ function parseAndValidate<T>(
  * Executes Gemini first; falls back to Groq on HTTP 429, 5xx, timeout, or network error.
  * Validates output with zod; retries once on the same provider if invalid before throwing.
  */
+async function attemptGemini<T>(
+  system: string,
+  user: string,
+  schema: z.ZodType<T>,
+  timeoutMs: number,
+): Promise<GenerateJsonResult<T>> {
+  const geminiModel = getGeminiModel();
+  let callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs);
+  let val = parseAndValidate(callRes.text, schema);
+
+  if (!val.success) {
+    const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
+    callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs);
+    val = parseAndValidate(callRes.text, schema);
+
+    if (!val.success) {
+      throw new AiInvalidOutputError(
+        `Gemini output failed schema validation after retry: ${val.rawError}`,
+        val.issues,
+      );
+    }
+  }
+
+  return {
+    data: val.data,
+    provider: "gemini",
+    model: geminiModel,
+    latencyMs: callRes.latencyMs,
+  };
+}
+
+async function attemptGroq<T>(
+  system: string,
+  user: string,
+  schema: z.ZodType<T>,
+  timeoutMs: number,
+): Promise<GenerateJsonResult<T>> {
+  const groqModel = getGroqModel();
+  let callRes = await callGroqRaw(groqModel, system, user, timeoutMs);
+  let val = parseAndValidate(callRes.text, schema);
+
+  if (!val.success) {
+    const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
+    callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs);
+    val = parseAndValidate(callRes.text, schema);
+
+    if (!val.success) {
+      throw new AiInvalidOutputError(
+        `Groq output failed schema validation after retry: ${val.rawError}`,
+        val.issues,
+      );
+    }
+  }
+
+  return {
+    data: val.data,
+    provider: "groq",
+    model: groqModel,
+    latencyMs: callRes.latencyMs,
+  };
+}
+
+function isErrorFallbackEligible(err: any, provider: "gemini" | "groq"): boolean {
+  if (err instanceof AiInvalidOutputError) return false;
+  const status = err?.status || 0;
+  const isNetworkOrTimeout =
+    err?.name === "TimeoutError" ||
+    err?.name === "AbortError" ||
+    err?.code === "ECONNRESET" ||
+    err?.code === "ENOTFOUND" ||
+    err?.message?.includes("fetch failed");
+
+  return (
+    status === 429 ||
+    (status >= 500 && status < 600) ||
+    status === 0 ||
+    isNetworkOrTimeout ||
+    shouldForceFail(provider)
+  );
+}
+
+/**
+ * Generate structured JSON validated by a Zod schema.
+ * Respects PRIMARY_AI_PROVIDER (or options.preferredProvider, default "gemini").
+ * Executes primary provider first; falls back to secondary on HTTP 429, 5xx, timeout, or network error.
+ * Validates output with zod; retries once on the active provider if invalid before throwing.
+ */
 export async function generateJson<T>(
   options: GenerateJsonOptions<T>,
 ): Promise<GenerateJsonResult<T>> {
-  const { system, user, schema, timeoutMs = 20000 } = options;
-  const geminiModel = getGeminiModel();
-  const groqModel = getGroqModel();
+  const { system, user, schema, timeoutMs = 20000, preferredProvider } = options;
+  const primary = (process.env.PRIMARY_AI_PROVIDER || preferredProvider || "gemini") as "gemini" | "groq";
+  const secondary = primary === "gemini" ? "groq" : "gemini";
 
-  let geminiEligible = true;
+  const executeProvider = (p: "gemini" | "groq") =>
+    p === "gemini"
+      ? attemptGemini(system, user, schema, timeoutMs)
+      : attemptGroq(system, user, schema, timeoutMs);
 
-  // Try Gemini
+  // Try Primary
   try {
-    let callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs);
-    let val = parseAndValidate(callRes.text, schema);
-
-    if (!val.success) {
-      // Retry once on Gemini with the validation issues
-      const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-      callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs);
-      val = parseAndValidate(callRes.text, schema);
-
-      if (!val.success) {
-        throw new AiInvalidOutputError(
-          `Gemini output failed schema validation after retry: ${val.rawError}`,
-          val.issues,
-        );
-      }
-    }
-
-    return {
-      data: val.data,
-      provider: "gemini",
-      model: geminiModel,
-      latencyMs: callRes.latencyMs,
-    };
+    return await executeProvider(primary);
   } catch (err: any) {
-    // If output was genuinely invalid twice, throw immediately without fallback
-    if (err instanceof AiInvalidOutputError) {
-      throw err;
+    if (err instanceof AiInvalidOutputError) throw err;
+    if (!isErrorFallbackEligible(err, primary)) {
+      throw new AiUnavailableError(`${primary} failed with error: ${err.message}`, err);
     }
-
-    // Check if error is eligible for fallback: 429, 5xx, timeout, network error
-    const status = err?.status || 0;
-    const isNetworkOrTimeout =
-      err?.name === "TimeoutError" ||
-      err?.name === "AbortError" ||
-      err?.code === "ECONNRESET" ||
-      err?.code === "ENOTFOUND" ||
-      err?.message?.includes("fetch failed");
-
-    const isFallbackEligible =
-      status === 429 ||
-      (status >= 500 && status < 600) ||
-      status === 0 ||
-      isNetworkOrTimeout ||
-      shouldForceFail("gemini");
-
-    if (!isFallbackEligible) {
-      // 4xx client errors (other than 429) indicate bad config/request
-      throw new AiUnavailableError(`Gemini failed with HTTP ${status}: ${err.message}`, err);
-    }
-
-    geminiEligible = false;
   }
 
-  // Fallback to Groq
+  // Fallback to Secondary
   try {
-    let callRes = await callGroqRaw(groqModel, system, user, timeoutMs);
-    let val = parseAndValidate(callRes.text, schema);
-
-    if (!val.success) {
-      // Retry once on Groq with the validation issues
-      const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-      callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs);
-      val = parseAndValidate(callRes.text, schema);
-
-      if (!val.success) {
-        throw new AiInvalidOutputError(
-          `Groq output failed schema validation after retry: ${val.rawError}`,
-          val.issues,
-        );
-      }
-    }
-
-    return {
-      data: val.data,
-      provider: "groq",
-      model: groqModel,
-      latencyMs: callRes.latencyMs,
-    };
+    return await executeProvider(secondary);
   } catch (err: any) {
-    if (err instanceof AiInvalidOutputError) {
-      throw err;
-    }
+    if (err instanceof AiInvalidOutputError) throw err;
     throw new AiUnavailableError(
-      `All AI providers failed. Gemini: unavailable; Groq: ${err?.message || "error"}`,
+      `All AI providers failed. Primary (${primary}): failed; Secondary (${secondary}): ${err?.message || "error"}`,
       err,
     );
   }

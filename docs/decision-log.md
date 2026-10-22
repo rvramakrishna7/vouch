@@ -24,6 +24,7 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-018 | 2026-10-22 | RLS enabled on every table in schema public with no policies, so Supabase's public Data API cannot read data. The server's postgres role bypasses RLS | Accepted |
 | DEC-019 | 2026-10-22 | Plain fetch for AI adapter (Gemini and Groq) instead of vendor SDKs to minimize function cold starts and simplify timeout handling | Accepted |
 | DEC-020 | 2026-10-22 | Claim Ledger pipeline: code retrieves candidate facts per sentence via embeddings, then ONE LLM call extracts and verifies claims, then code validates every citation (docs/claim-ledger-spec.md). Faster than two LLM calls; the model still never has the final word (DEC-005) | Accepted |
+| DEC-021 | 2026-10-22 | Claim Ledger AI latency optimization: default model switched to gemini-3.5-flash-lite with thinkingLevel MINIMAL (benchmarked 2.51s-2.90s, 5/5 accuracy) | Accepted |
 
 ---
 
@@ -90,3 +91,9 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 - **Context:** DEC-005 planned a 2-step LLM pipeline (Extract then Verify). With round-trips taking 1-2s each on external AI endpoints, 2 sequential LLM calls in one review request adds unnecessary latency.
 - **Decision (Accepted):** Code splits content into sentences, embeds them in a single batch, and retrieves top candidate facts via pgvector cosine distance. Then ONE LLM call extracts claims and verifies them against the candidate facts and claims rules. Code strictly validates quote presence, offsets, fact codes, and expiry (docs/claim-ledger-spec.md).
 - **Why:** Delivers full explainability and citations in a single AI call while preserving Invariant 2 (the model never has the final word on evidence).
+
+### DEC-021: Claim Ledger AI latency optimization (owner rule)
+- **Context:** Initial live review LLM step took 17.6 s with gemini-3.5-flash (no thinking constraint), exceeding the 5 s target.
+- **Benchmark (S8a.1):** 5 configurations benchmarked on the seeded draft (3 runs each). Config B (`gemini-3.5-flash-lite` with `thinkingLevel: MINIMAL`) was the only config to achieve 100% accuracy (5/5 correct verdicts) across all 3 runs, completing in 2.60 s, 2.90 s, and 2.51 s.
+- **Decision (Accepted):** Set `gemini-3.5-flash-lite` with `thinkingLevel: MINIMAL` as the default in code. Keeps Gemini primary per DEC-004 while bringing the LLM review step well under 3 seconds.
+- **Tradeoff:** Minimal internal reasoning tokens are consumed, which speeds up processing and eliminates intermittent 503 timeouts seen under unconstrained thinking.
