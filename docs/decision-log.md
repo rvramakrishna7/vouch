@@ -18,6 +18,7 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-012 | 2026-10-22 | Hosting: client AND server on Vercel (two projects, region bom1); Supabase in Mumbai. Supersedes Render from the Round 1 plan | Accepted |
 | DEC-013 | 2026-10-22 | Findings store `start_offset` / `end_offset`, computed in code (never trusted from the model) | Accepted |
 | DEC-014 | 2026-10-22 | `client/` and `server/` are independent npm packages (no workspaces); each has its own lockfile | Accepted |
+| DEC-015 | 2026-10-22 | Server pinned to TypeScript 5.9 because Vercel's builder fails with TS 7.0.2 (TS2688 for 'node'); revisit after Round 3 | Proposed |
 
 ---
 
@@ -52,3 +53,8 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 ### DEC-013: Character offsets for findings (proposed by worker in S0)
 - **Context:** `span_text` alone is ambiguous when a phrase appears twice; fixes and diffs could hit the wrong place.
 - **Decision:** store `start_offset` and `end_offset`. Offsets are computed in code by locating the quoted span in the revision text. The model may return an optional 1-based `occurrence`; default is the first. If the span is not found, the finding becomes `needs_human_judgement` (consistent with DEC-005).
+
+### DEC-015: Pin server TypeScript to 5.9 (proposed by worker in S1.1)
+- **Context:** on Vercel, `npm run build` (`tsc --noEmit`) passed, then Vercel's own transpile step ("Using the TypeScript 7.0.2 compiler executable") failed with TS2688 "Cannot find type definition file for 'node'". Locally everything passed.
+- **Decision:** `server/` devDependency `typescript` pinned to `~5.9` (5.9.3). `tsconfig.json` keeps `"types": ["node"]`. `@types/node` 26.6.5 declares support for TS >= 5.6, so no type package was downgraded.
+- **Tradeoff:** we stay on the older compiler and miss TS 7 speed. Revisit after Round 3.
