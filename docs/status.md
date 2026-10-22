@@ -62,23 +62,36 @@ Rule-based review engine, Findings UI, and Performance optimization (S6a, S6b, S
     - `GET /api/contents/:id`: 0.123s / 0.084s / 0.082s (was ~0.23s)
     - `GET /api/contents/:id/reviews/latest`: 0.095s / 0.114s / 0.091s (was ~0.23s)
     - `POST /api/contents/:id/reviews`: 0.123s / 0.102s / 0.108s (was ~0.28s)
-- Vitest suite: 37/37 tests passing across 6 test suites.
+- Vitest suite: 43/43 tests passing across 7 test suites.
 - Client build: `tsc -b && vite build` passing with 0 errors.
+
+AI adapter and Fact Embeddings (S7) completed and live:
+- Server AI adapter (`server/src/ai/`):
+  - `generateJson({system, user, schema, timeoutMs})`: primary Gemini (`gemini-3.5-flash`), on 429/5xx/network/timeout falls back to Groq (`openai/gpt-oss-120b`). Validates with zod; retries once on same provider if output is invalid before throwing `AiInvalidOutputError`. If both fail, throws `AiUnavailableError`.
+  - Test hooks: `AI_FORCE_FAIL="gemini"` or `"all"` supported for unit tests and simulation.
+  - Invariant 8 prompt-injection guard: `wrapUserContent` wraps submitted content in explicit delimiters and sets system guard instructions treating content as data, never instructions.
+  - Zero leakage: never logs API keys or raw prompts; logs only provider, model, latency, and error class.
+  - Plain fetch implementation (DEC-019 Proposed): zero vendor SDK bloat, native `AbortSignal.timeout` handling, fast cold starts.
+  - `embed(texts[])`: 768-dimensional embeddings via Gemini `gemini-embedding-001` with `batchEmbedContents`.
+- Fact embeddings batch job (`server/src/ai/factEmbeddings.ts` & `npm run embed:facts`):
+  - Populates `facts.embedding` with pgvector literals (`vector(768)`). All 8 seeded facts embedded (100%).
+- AI Status API (`GET /api/ai/status`):
+  - Secured with `requireAuth`. Verified live returning `{gemini: {ok: true, model: "gemini-3.5-flash"}, groq: {ok: true, model: "openai/gpt-oss-120b"}, embeddings: {ok: true, model: "gemini-embedding-001", dims: 768}}`.
 
 Verified row counts:
 - schema_migrations: 3
 - organizations: 2
 - users: 4
 - rules: 10
-- facts: 8
+- facts: 8 (all 8 embedded with vector(768))
 - terms: 9
 - contents: 2
 - revisions: 2
-- reviews: 1 (after live test)
-- findings: 3 (after live test)
+- reviews: 1
+- findings: 3
 - comments: 0
 - approvals: 0
-- audit_events: 3 (base seed + live test review)
+- audit_events: 3
 
 ## Steps
 | Step | Name | Target | Status |
@@ -90,7 +103,7 @@ Verified row counts:
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Done: S4a (server API live) and S4b (interactive Brand Kit UI for all roles) |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
-| S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Pending |
+| S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Pending |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
@@ -99,7 +112,7 @@ Verified row counts:
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S7: AI adapter (Gemini primary + Groq fallback + zod validation) and embeddings.
+S8: Claim Ledger pipeline (extract, retrieve via pgvector, verify with AI, validate in code).
 
 ## Open issues
 none
