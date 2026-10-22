@@ -251,6 +251,7 @@ contentsRouter.get("/:id/reviews/latest", async (req: Request, res: Response) =>
                  'severity', f.severity,
                  'confidence', f.confidence,
                  'suggested_fix', f.suggested_fix,
+                 'replacement_text', f.replacement_text,
                  'resolution', f.resolution,
                  'dismiss_reason', f.dismiss_reason,
                  'created_at', f.created_at
@@ -573,6 +574,255 @@ contentsRouter.get("/:id", async (req: Request, res: Response) => {
     return res.json(content);
   } catch (err) {
     console.error("GET /api/contents/:id error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+const createRevisionSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("apply_fixes"),
+  }),
+  z.object({
+    mode: z.literal("manual"),
+    body: z.string().trim().min(1, "Body is required").max(20000, "Body must be at most 20000 characters"),
+  }),
+]);
+
+// POST /api/contents/:id/revisions (creator owner only)
+contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  // Creator only
+  if (req.user!.role !== "creator") {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  const parseResult = createRevisionSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: "invalid_input", details: parseResult.error.format() });
+  }
+
+  try {
+    // Verify content exists and is owned by this creator
+    const { rows: contentRows } = await pool.query<{ id: string; created_by: string }>(
+      `SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2`,
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    if (contentRows[0].created_by !== req.user!.id) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const { mode } = parseResult.data;
+
+    if (mode === "manual") {
+      const { body } = parseResult.data;
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows: maxRows } = await client.query<{ max_n: number }>(
+          `SELECT COALESCE(MAX(n), 0)::int AS max_n FROM revisions WHERE content_id = $1 AND organization_id = $2`,
+          [id, orgId],
+        );
+        const nextN = (maxRows[0]?.max_n ?? 0) + 1;
+        const { rows: revRows } = await client.query(
+          `INSERT INTO revisions (organization_id, content_id, n, body, created_by)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, organization_id, content_id, n, body, created_by, created_at`,
+          [orgId, id, nextN, body, req.user!.id],
+        );
+        const revision = revRows[0];
+
+        await client.query(
+          `UPDATE contents SET updated_at = now() WHERE id = $1 AND organization_id = $2`,
+          [id, orgId],
+        );
+
+        await logAudit({
+          organizationId: orgId,
+          actor: req.user!.id,
+          action: "revision.create",
+          entity: `revision:${revision.id}`,
+          payload: {
+            content_id: id,
+            revision_id: revision.id,
+            n: revision.n,
+            mode: "manual",
+            applied: [],
+            skipped: [],
+          },
+          client,
+        });
+
+        await client.query("COMMIT");
+        return res.status(201).json({ revision, applied: [], skipped: [] });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    // mode === "apply_fixes"
+    // 1. Fetch latest revision of content
+    const { rows: latestRevRows } = await pool.query<{ id: string; n: number; body: string }>(
+      `SELECT id, n, body FROM revisions
+       WHERE content_id = $1 AND organization_id = $2
+       ORDER BY n DESC LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (latestRevRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const latestRev = latestRevRows[0];
+
+    // 2. Fetch latest review of that latest revision
+    const { rows: latestReviewRows } = await pool.query<{ id: string }>(
+      `SELECT id FROM reviews
+       WHERE revision_id = $1 AND organization_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [latestRev.id, orgId],
+    );
+
+    if (latestReviewRows.length === 0) {
+      return res.status(400).json({ error: "nothing_to_apply" });
+    }
+    const latestReview = latestReviewRows[0];
+
+    // 3. Fetch accepted or edited findings for that latest review
+    const { rows: candidateFindings } = await pool.query<{
+      id: string;
+      span_text: string;
+      start_offset: number | null;
+      end_offset: number | null;
+      suggested_fix: string | null;
+      replacement_text: string | null;
+      resolution: string;
+    }>(
+      `SELECT id, span_text, start_offset, end_offset, suggested_fix, replacement_text, resolution
+       FROM findings
+       WHERE review_id = $1 AND organization_id = $2 AND resolution IN ('accepted', 'edited')`,
+      [latestReview.id, orgId],
+    );
+
+    if (candidateFindings.length === 0) {
+      return res.status(400).json({ error: "nothing_to_apply" });
+    }
+
+    interface ValidFinding {
+      id: string;
+      start_offset: number;
+      end_offset: number;
+      replacement: string;
+    }
+
+    const validCandidates: ValidFinding[] = [];
+    for (const f of candidateFindings) {
+      const replacement = f.resolution === "accepted" ? f.suggested_fix : f.replacement_text;
+      if (
+        typeof f.start_offset === "number" &&
+        typeof f.end_offset === "number" &&
+        f.start_offset >= 0 &&
+        f.end_offset >= f.start_offset &&
+        f.end_offset <= latestRev.body.length &&
+        typeof replacement === "string"
+      ) {
+        validCandidates.push({
+          id: f.id,
+          start_offset: f.start_offset,
+          end_offset: f.end_offset,
+          replacement,
+        });
+      }
+    }
+
+    if (validCandidates.length === 0) {
+      return res.status(400).json({ error: "nothing_to_apply" });
+    }
+
+    // Sort candidates from END of text backwards: start_offset DESC, then end_offset DESC
+    validCandidates.sort((a, b) => b.start_offset - a.start_offset || b.end_offset - a.end_offset);
+
+    const applied: string[] = [];
+    const skipped: string[] = [];
+    const appliedSpans: Array<{ start: number; end: number }> = [];
+
+    let newBody = latestRev.body;
+
+    for (const candidate of validCandidates) {
+      // Check overlap with already applied spans
+      const hasOverlap = appliedSpans.some(
+        (span) => Math.max(span.start, candidate.start_offset) < Math.min(span.end, candidate.end_offset),
+      );
+
+      if (hasOverlap) {
+        skipped.push(candidate.id);
+      } else {
+        applied.push(candidate.id);
+        appliedSpans.push({ start: candidate.start_offset, end: candidate.end_offset });
+        newBody = newBody.slice(0, candidate.start_offset) + candidate.replacement + newBody.slice(candidate.end_offset);
+      }
+    }
+
+    if (applied.length === 0) {
+      return res.status(400).json({ error: "nothing_to_apply", skipped });
+    }
+
+    // Insert revision n+1 in transaction
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const nextN = latestRev.n + 1;
+      const { rows: revRows } = await client.query(
+        `INSERT INTO revisions (organization_id, content_id, n, body, created_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, organization_id, content_id, n, body, created_by, created_at`,
+        [orgId, id, nextN, newBody, req.user!.id],
+      );
+      const revision = revRows[0];
+
+      await client.query(
+        `UPDATE contents SET updated_at = now() WHERE id = $1 AND organization_id = $2`,
+        [id, orgId],
+      );
+
+      await logAudit({
+        organizationId: orgId,
+        actor: req.user!.id,
+        action: "revision.create",
+        entity: `revision:${revision.id}`,
+        payload: {
+          content_id: id,
+          revision_id: revision.id,
+          n: revision.n,
+          mode: "apply_fixes",
+          applied,
+          skipped,
+        },
+        client,
+      });
+
+      await client.query("COMMIT");
+      return res.status(201).json({ revision, applied, skipped });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("POST /api/contents/:id/revisions error:", err);
     return res.status(500).json({ error: "internal_error" });
   }
 });
