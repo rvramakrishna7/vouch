@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import authRouter from "./routes/auth.js";
+import contentsRouter from "./routes/contents.js";
 import factsRouter from "./routes/facts.js";
 import rulesRouter from "./routes/rules.js";
 import termsRouter from "./routes/terms.js";
@@ -31,6 +32,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 
 // Routes
 app.use("/api/auth", authRouter);
+app.use("/api/contents", contentsRouter);
 app.use("/api/rules", rulesRouter);
 app.use("/api/facts", factsRouter);
 app.use("/api/terms", termsRouter);
