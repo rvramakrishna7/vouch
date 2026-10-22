@@ -18,7 +18,10 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 | DEC-012 | 2026-10-22 | Hosting: client AND server on Vercel (two projects, region bom1); Supabase in Mumbai. Supersedes Render from the Round 1 plan | Accepted |
 | DEC-013 | 2026-10-22 | Findings store `start_offset` / `end_offset`, computed in code (never trusted from the model) | Accepted |
 | DEC-014 | 2026-10-22 | `client/` and `server/` are independent npm packages (no workspaces); each has its own lockfile | Accepted |
-| DEC-015 | 2026-10-22 | Server pinned to TypeScript 5.9 because Vercel's builder fails with TS 7.0.2 (TS2688 for 'node'); revisit after Round 3 | Proposed |
+| DEC-015 | 2026-10-22 | Server pinned to TypeScript 5.9 because Vercel's builder fails with TS 7.0.2 (TS2688 for 'node'); revisit after Round 3 | Accepted |
+| DEC-016 | 2026-10-22 | Supabase pooler TLS: rejectUnauthorized:false with warning unless SUPABASE_CA_CERT is provided | Accepted |
+| DEC-017 | 2026-10-22 | JWT (8h expiry) sent as Authorization: Bearer; client stores it in sessionStorage (client and server are different vercel.app sites, so cookies are unreliable) | Accepted |
+| DEC-018 | 2026-10-22 | RLS enabled on every table in schema public with no policies, so Supabase's public Data API cannot read data. The server's postgres role bypasses RLS | Accepted |
 
 ---
 
@@ -58,3 +61,18 @@ Every product or architecture decision is recorded here. Status: **Proposed** (w
 - **Context:** on Vercel, `npm run build` (`tsc --noEmit`) passed, then Vercel's own transpile step ("Using the TypeScript 7.0.2 compiler executable") failed with TS2688 "Cannot find type definition file for 'node'". Locally everything passed.
 - **Decision:** `server/` devDependency `typescript` pinned to `~5.9` (5.9.3). `tsconfig.json` keeps `"types": ["node"]`. `@types/node` 26.6.5 declares support for TS >= 5.6, so no type package was downgraded.
 - **Tradeoff:** we stay on the older compiler and miss TS 7 speed. Revisit after Round 3.
+
+### DEC-016: Supabase pooler TLS configuration
+- **Context:** Supabase Transaction pooler uses a certificate chain that causes `SELF_SIGNED_CERT_IN_CHAIN` on Node clients without custom CA certs bundled.
+- **Decision:** Accepted with condition: if env `SUPABASE_CA_CERT` is set, use it as `ssl.ca` with verification on (`rejectUnauthorized: true`); otherwise `rejectUnauthorized: false` and log one warning at startup.
+- **Tradeoff:** Enables immediate connectivity across dev/serverless environments without manual cert installation, while allowing hardened verification via env var.
+
+### DEC-017: JWT authentication via Authorization Bearer header
+- **Context:** Client and server deploy to different vercel.app domains, making cross-site cookies unreliable across browsers.
+- **Decision:** JWT (8h expiry) sent as `Authorization: Bearer <token>`; client stores it in `sessionStorage`.
+- **Tradeoff:** Tokens are kept per-session in the browser tab and must be attached to fetch requests explicitly.
+
+### DEC-018: Row Level Security on public tables without policies
+- **Context:** Supabase exposes PostgREST public Data API by default on schema `public`.
+- **Decision:** Enable RLS (`ALTER TABLE <t> ENABLE ROW LEVEL SECURITY`) on all tables with no policies. Supabase's anonymous/authenticated REST APIs cannot read or write data. The backend connects using the `postgres` superuser/bypass-rls role through Express.
+- **Tradeoff:** Direct Supabase client access is disabled; all data access routes through Express with tenant isolation.

@@ -26,14 +26,25 @@ if (!connectionString) {
   console.warn("DATABASE_URL environment variable is not set");
 }
 
+let sslConfig: pg.ConnectionConfig["ssl"];
+const caCert = process.env.SUPABASE_CA_CERT;
+
+if (caCert) {
+  sslConfig = {
+    rejectUnauthorized: true,
+    ca: caCert,
+  };
+} else {
+  console.warn("[pool] SUPABASE_CA_CERT not set; TLS running with rejectUnauthorized: false (DEC-016)");
+  sslConfig = {
+    rejectUnauthorized: false,
+  };
+}
+
 export const pool = new Pool({
   connectionString,
-  ssl: {
-    // DEC-016 (Proposed): rejectUnauthorized set to false because Supabase pooler
-    // uses a certificate chain that causes SELF_SIGNED_CERT_IN_CHAIN on Node clients.
-    rejectUnauthorized: false,
-  },
-  max: 10,
+  ssl: sslConfig,
+  max: 3,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });
