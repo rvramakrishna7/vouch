@@ -364,4 +364,99 @@ describe.runIf(hasDb)("Finding Resolutions and Revisions API (Task S9a)", () => 
     expect(allIds).toContain(resApply.body.skipped[0]);
     expect(resApply.body.applied[0]).not.toBe(resApply.body.skipped[0]);
   });
+
+  it("mode: 'preview' returns preview body without saving a revision", async () => {
+    const initialText = "The quick brown fox jumps over the lazy dog.";
+    const { contentId, reviewId } = await setupTestContent(initialText);
+
+    const { rows: fRows } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'brown', 10, 15, 'low', 'Color check', 'red')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    const findingId = fRows[0].id;
+
+    await request(app)
+      .patch(`/api/findings/${findingId}/resolution`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ action: "accept" });
+
+    // Call preview
+    const resPreview = await request(app)
+      .post(`/api/contents/${contentId}/revisions`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ mode: "preview" });
+
+    expect(resPreview.status).toBe(200);
+    expect(resPreview.body.body).toBe("The quick red fox jumps over the lazy dog.");
+    expect(resPreview.body.applied).toEqual([findingId]);
+    expect(resPreview.body.skipped).toEqual([]);
+
+    // Verify database revisions count is STILL 1 (no new revision saved)
+    const { rows: revRows } = await pool.query<{ c: number }>(
+      "SELECT count(*)::int as c FROM revisions WHERE content_id = $1",
+      [contentId],
+    );
+    expect(revRows[0].c).toBe(1);
+  });
+
+  it("capitalises first letter when replacement starts at beginning of sentence (offset 0 or after '. ', '! ', '? ')", async () => {
+    const initialText = "hello world. another test! one more? final sentence.";
+    const { contentId, reviewId } = await setupTestContent(initialText);
+
+    // 1. Offset 0: "hello" [0, 5) -> "hi"
+    const { rows: [f1] } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'hello', 0, 5, 'low', 'r1', 'hi')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    // 2. Mid-sentence: "world" [6, 11) -> "earth" (should NOT capitalize)
+    const { rows: [f2] } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'world', 6, 11, 'low', 'r2', 'earth')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    // 3. After ". ": "another" [13, 20) -> "next"
+    const { rows: [f3] } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'another', 13, 20, 'low', 'r3', 'next')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    // 4. After "! ": "one" [27, 30) -> "two"
+    const { rows: [f4] } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'one', 27, 30, 'low', 'r4', 'two')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    // 5. After "? ": "final" [37, 42) -> "last"
+    const { rows: [f5] } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'final', 37, 42, 'low', 'r5', 'last')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+
+    // Accept all 5 findings
+    for (const fid of [f1.id, f2.id, f3.id, f4.id, f5.id]) {
+      await request(app)
+        .patch(`/api/findings/${fid}/resolution`)
+        .set("Authorization", `Bearer ${creatorToken}`)
+        .send({ action: "accept" });
+    }
+
+    const resApply = await request(app)
+      .post(`/api/contents/${contentId}/revisions`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ mode: "apply_fixes" });
+
+    expect(resApply.status).toBe(201);
+    expect(resApply.body.revision.body).toBe(
+      "Hi earth. Next test! Two more? Last sentence.",
+    );
+  });
 });
