@@ -142,6 +142,30 @@ Claim Ledger pipeline and UI (S8a, S8a.1, S8a.2, S8b) completed and live:
     - "Keeps drinks cold for 48 hours.": `contradicted` (cites `F-15` + `CLAIM-03`, suggested fix: "Keeps drinks cold for 24 hours.")
 - Unit test suite: 49/49 tests passing across 8 test files in Vitest.
 
+Finding resolutions and Revisions API (S9a) completed and live:
+- Database: Migration `005_finding_replacement_text.sql` applied to Supabase PostgreSQL, adding `replacement_text TEXT` to `findings`.
+- Resolution endpoint (`PATCH /api/findings/:id/resolution` in `server/src/routes/findings.ts`):
+  - Creator owner only: returns 403 for non-creator roles, 404 for unknown finding, other org, or other creator's content.
+  - Action `accept`: requires `suggested_fix` (returns 400 `no_suggested_fix` otherwise).
+  - Action `edit`: requires `text` (1-500 chars), stored in `replacement_text`.
+  - Action `dismiss`: requires `reason` (min 5 chars), stored in `dismiss_reason` (returns 400 otherwise).
+  - Invariant guard: supported claims cannot be resolved (returns 400 `nothing_to_fix`).
+  - Stale guard: only findings of the content's latest review on the latest revision can be resolved (returns 409 `stale_review`).
+  - Audit logging: records append-only audit event (`finding.resolve`).
+- Revisions endpoint (`POST /api/contents/:id/revisions` in `server/src/routes/contents.ts`):
+  - Creator owner only: returns 403 for non-creator, 404 for cross-tenant/other creator.
+  - Mode `apply_fixes`: fetches accepted and edited findings of the latest review, replaces spans from END of text backwards so character offsets remain valid, detects and skips overlapping spans, creates revision n+1 (returns 400 `nothing_to_apply` if no candidate findings). Returns `{ revision, applied, skipped }`.
+  - Mode `manual`: creates revision n+1 with provided body (1-20000 chars).
+  - Updates `contents.updated_at = now()`.
+  - Audit logging: records append-only audit event (`revision.create`).
+- Live production verification on https://vouch-ten-iota.vercel.app:
+  - Created new content "API test (S9a)" (ID: `4f2932fd-7617-43e4-a26a-d885e944bc81`) with sample caption.
+  - Ran review on revision n=1 (Groq primary, latency 2309ms).
+  - Accepted fix on "48 hours" claim (ID: `b8558971-0277-46cc-ae77-50f9e6465572`).
+  - Dismissed `#stayhydrated` (ID: `d8c841a4-43bc-426d-a3e0-cfd64bad337c`) with reason: "Brand social team confirmed #stayhydrated is our approved evergreen campaign hashtag.".
+  - Called `apply_fixes`: created revision n=2, applied `["b8558971-0277-46cc-ae77-50f9e6465572"]`, skipped `[]`.
+- Vitest suite: 58/58 tests passing across 9 test files in Vitest.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -169,14 +193,14 @@ Verified row counts:
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
-| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
+| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a (server resolutions & revisions API done and live) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S9: Findings UI, fixes (accept/edit/dismiss), revisions + diff.
+S9b: Findings UI (accept/edit/dismiss buttons, revision selector, and visual diff view).
 
 ## Open issues
 none
