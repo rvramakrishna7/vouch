@@ -142,7 +142,7 @@ Claim Ledger pipeline and UI (S8a, S8a.1, S8a.2, S8b) completed and live:
     - "Keeps drinks cold for 48 hours.": `contradicted` (cites `F-15` + `CLAIM-03`, suggested fix: "Keeps drinks cold for 24 hours.")
 - Unit test suite: 49/49 tests passing across 8 test files in Vitest.
 
-Finding resolutions, Preview, and Revisions UI (S9a, S9a.1, S9a.2, S9b) completed:
+Finding resolutions, Preview, and Revisions UI (S9a, S9a.1, S9a.2, S9b, S9b.1) completed:
 - Database: Migration `005_finding_replacement_text.sql` applied to Supabase PostgreSQL, adding `replacement_text TEXT` to `findings`.
 - Server enhancements (`server/src/routes/contents.ts` & `server/src/ledger/pipeline.ts`):
   - Added `{ mode: "preview" }` to `POST /api/contents/:id/revisions`: returns `{ body, applied, skipped }` without saving a revision row.
@@ -157,6 +157,11 @@ Finding resolutions, Preview, and Revisions UI (S9a, S9a.1, S9a.2, S9b) complete
   - Revision history: interactive list of all revisions, clicking an older revision displays its text and a word-level diff against the revision before it (or "Initial revision" for rev 1).
   - Post-creation banner: `"Revision N created. Run Vouch review again to check the new text."` with "Run review" button.
   - Stale review 409 handling: displays alert `"This review is for an older revision. Run a new review first."` and disables resolution buttons until a new review finishes.
+- Resolve UI fix & E2E Acceptance test (S9b.1):
+  - Fixed root cause where DB default `resolution: "open"` was treated as resolved: updated `hasResolution = Boolean(finding.resolution && finding.resolution !== "open")` and prevented badge branch from rendering while actively editing (`isEditing`) or dismissing (`isDismissing`).
+  - Added Playwright configuration (`client/playwright.config.ts`) building app with `VITE_API_URL=http://api.test` and serving via `vite preview`.
+  - Added E2E test suite `client/e2e/resolve.spec.ts` executing all 8 checks from `docs/owner-tests/README.md` against mocked API routes, generating full-page screenshots in `client/e2e/screenshots/` (git-ignored).
+  - 8/8 checks passing in Playwright (2/2 test blocks).
 - Vitest suite: 69/69 tests passing across 10 test files in Vitest.
 - Client build: `tsc -b && vite build` passing with 0 errors.
 
@@ -187,7 +192,7 @@ Verified row counts:
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
-| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history) |
+| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history), S9b.1 (fix resolve UI "open" status & 8/8 Playwright e2e checks) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Next |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
