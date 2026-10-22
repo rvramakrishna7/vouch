@@ -36,6 +36,10 @@ interface Review {
   started_at: string;
   finished_at?: string;
   created_at: string;
+  ai_status?: "ok" | "unavailable" | "invalid_output" | "skipped" | null;
+  ai_provider?: string | null;
+  ai_model?: string | null;
+  ai_latency_ms?: number | null;
 }
 
 interface Finding {
@@ -46,7 +50,11 @@ interface Finding {
   span_text: string;
   start_offset: number;
   end_offset: number;
-  verdict?: string | null;
+  verdict?: "supported" | "contradicted" | "unsupported" | "outdated" | "needs_human_judgement" | string | null;
+  fact_id?: string | null;
+  fact_code?: string | null;
+  fact_statement?: string | null;
+  fact_valid_until?: string | null;
   rule_id?: string | null;
   rule_code?: string | null;
   rule_text?: string | null;
@@ -93,6 +101,42 @@ const SEVERITY_BADGES: Record<string, { label: string; className: string }> = {
   },
 };
 
+const VERDICT_META: Record<
+  string,
+  { label: string; chipClass: string; highlightClass: string }
+> = {
+  supported: {
+    label: "Supported",
+    chipClass: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    highlightClass:
+      "bg-emerald-100 text-emerald-950 underline decoration-emerald-500 decoration-2 underline-offset-4",
+  },
+  outdated: {
+    label: "Outdated",
+    chipClass: "bg-amber-100 text-amber-800 border-amber-300",
+    highlightClass:
+      "bg-amber-100 text-amber-950 underline decoration-amber-500 decoration-2 underline-offset-4",
+  },
+  contradicted: {
+    label: "Contradicted",
+    chipClass: "bg-rose-100 text-rose-800 border-rose-300",
+    highlightClass:
+      "bg-rose-100 text-rose-950 underline decoration-rose-600 decoration-2 underline-offset-4",
+  },
+  unsupported: {
+    label: "Unsupported",
+    chipClass: "bg-red-100 text-red-800 border-red-300",
+    highlightClass:
+      "bg-red-100 text-red-950 underline decoration-red-600 decoration-2 underline-offset-4",
+  },
+  needs_human_judgement: {
+    label: "Needs human judgement",
+    chipClass: "bg-purple-100 text-purple-800 border-purple-300",
+    highlightClass:
+      "bg-purple-100 text-purple-950 underline decoration-purple-500 decoration-2 underline-offset-4",
+  },
+};
+
 export function ContentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -106,10 +150,25 @@ export function ContentDetailPage() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [reviewLoading, setReviewLoading] = useState(true);
   const [reviewRunning, setReviewRunning] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null);
 
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Timer for review running progress
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (reviewRunning) {
+      setElapsedSeconds(0);
+      interval = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [reviewRunning]);
 
   const fetchAll = async () => {
     if (!id) return;
@@ -118,7 +177,6 @@ export function ContentDetailPage() {
     setError(null);
     setReviewError(null);
 
-    // Parallel execution of independent endpoints (Requirement 4)
     const contentPromise = apiFetch<ContentDetail>(`/api/contents/${id}`);
     const reviewPromise = apiFetch<{ review: Review; findings: Finding[] }>(
       `/api/contents/${id}/reviews/latest`,
@@ -235,20 +293,18 @@ export function ContentDetailPage() {
   const latestRevision = content?.revisions?.[0];
   const olderRevisions = (content?.revisions ?? []).slice(1);
 
-  // Severity counts
-  const highCount = findings.filter((f) => f.severity === "high").length;
-  const mediumCount = findings.filter((f) => f.severity === "medium").length;
-  const lowCount = findings.filter((f) => f.severity === "low").length;
+  // Group findings into claims vs rule-based findings
+  const claimFindings = findings.filter((f) => f.kind === "claim");
+  const ruleFindings = findings.filter((f) => f.kind !== "claim");
 
-  // Sort findings for cards: severity first (high, medium, low) then start position
-  const severityRank: Record<string, number> = { high: 1, medium: 2, low: 3 };
-  const sortedCards = [...findings].sort((a, b) => {
-    const rankDiff = (severityRank[a.severity] ?? 99) - (severityRank[b.severity] ?? 99);
-    if (rankDiff !== 0) return rankDiff;
-    return a.start_offset - b.start_offset;
-  });
+  // Claim verdict counts
+  const supportedCount = claimFindings.filter((f) => f.verdict === "supported").length;
+  const outdatedCount = claimFindings.filter((f) => f.verdict === "outdated").length;
+  const contradictedCount = claimFindings.filter((f) => f.verdict === "contradicted").length;
+  const unsupportedCount = claimFindings.filter((f) => f.verdict === "unsupported").length;
+  const needsHumanCount = claimFindings.filter((f) => f.verdict === "needs_human_judgement").length;
 
-  // Build highlighted text segments (handling overlaps by skipping overlapping highlight)
+  // Build highlighted text segments
   const renderHighlightedBody = () => {
     if (!latestRevision) return null;
     const bodyText = latestRevision.body;
@@ -318,12 +374,20 @@ export function ContentDetailPage() {
 
           let highlightStyle =
             "bg-slate-100 text-slate-900 underline decoration-slate-400 decoration-2 underline-offset-4";
-          if (f.severity === "high") {
+
+          if (f.kind === "claim") {
+            const v = f.verdict || "unsupported";
             highlightStyle =
-              "bg-red-100 text-red-950 underline decoration-red-500 decoration-2 underline-offset-4";
-          } else if (f.severity === "medium") {
-            highlightStyle =
-              "bg-amber-100 text-amber-950 underline decoration-amber-500 decoration-2 underline-offset-4";
+              VERDICT_META[v]?.highlightClass ||
+              "bg-purple-100 text-purple-950 underline decoration-purple-500 decoration-2 underline-offset-4";
+          } else {
+            if (f.severity === "high") {
+              highlightStyle =
+                "bg-red-100 text-red-950 underline decoration-red-500 decoration-2 underline-offset-4";
+            } else if (f.severity === "medium") {
+              highlightStyle =
+                "bg-amber-100 text-amber-950 underline decoration-amber-500 decoration-2 underline-offset-4";
+            }
           }
 
           return (
@@ -404,8 +468,23 @@ export function ContentDetailPage() {
         </div>
       </div>
 
+      {/* Progress Line while Review Runs (Requirement 6) */}
+      {reviewRunning && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-sm text-sm text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span className="font-semibold">Review running ({elapsedSeconds}s):</span>
+            <span className="text-xs text-blue-800 font-medium">
+              Checking rules &rarr; Finding relevant facts &rarr; Verifying claims
+            </span>
+          </div>
+          <span className="text-xs text-blue-600 font-mono">Keep page open</span>
+        </div>
+      )}
+
+      {/* Error / Warning Banners */}
       {reviewError && (
-        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
           <span>{reviewError}</span>
           <button
             type="button"
@@ -417,7 +496,32 @@ export function ContentDetailPage() {
         </div>
       )}
 
-      {/* Metadata Grid (Render skeleton immediately while loading, Requirement 4) */}
+      {/* Amber Banner when AI check is unavailable (Requirement 5) */}
+      {review && review.ai_status && review.ai_status !== "ok" && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900 flex items-start gap-3">
+          <svg
+            className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <div>
+            <span className="font-semibold block">AI check unavailable right now</span>
+            <span className="text-xs text-amber-800">
+              Rule-based findings are shown below; try again in a minute for full claim verification.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Metadata Grid */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-sm">
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
@@ -490,53 +594,64 @@ export function ContentDetailPage() {
         </div>
       </div>
 
-      {/* Summary Bar above content and findings */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
+      {/* Summary Bar above content and findings (Requirement 4) */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-2">
         {loading || reviewLoading ? (
           <div className="flex items-center justify-between gap-4">
-            <div className="h-5 w-48 bg-slate-200 rounded animate-pulse" />
-            <div className="h-5 w-36 bg-slate-100 rounded animate-pulse hidden sm:block" />
+            <div className="h-5 w-64 bg-slate-200 rounded animate-pulse" />
+            <div className="h-5 w-48 bg-slate-100 rounded animate-pulse hidden sm:block" />
           </div>
         ) : review ? (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
-            <div className="flex items-center flex-wrap gap-2.5">
+            <div className="flex items-center flex-wrap gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-1">
-                Findings:
+                Claims:
               </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200">
-                {highCount} High
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                {supportedCount} supported
               </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                {mediumCount} Medium
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                {outdatedCount} outdated
               </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                {lowCount} Low
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                {contradictedCount} contradicted
               </span>
-              <span className="text-xs text-slate-400">
-                ({findings.length} total)
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200">
+                {unsupportedCount} unsupported
+              </span>
+              {needsHumanCount > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                  {needsHumanCount} needs judgement
+                </span>
+              )}
+              <span className="text-slate-300 mx-1">|</span>
+              <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                Rule findings: {ruleFindings.length}
               </span>
             </div>
 
+            {/* AI and Engine Disclosure Line */}
             <div className="text-xs text-slate-500 font-medium">
               Checked by:{" "}
               <span className="text-slate-800 font-semibold">
-                {review.provider}
-              </span>{" "}
-              &bull;{" "}
-              <span className="text-slate-800 font-mono">
-                {review.model}
-              </span>{" "}
-              &bull;{" "}
-              <span>
-                {new Date(review.finished_at || review.created_at).toLocaleTimeString(
-                  undefined,
-                  {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  },
-                )}
+                rule engine vouch-rules-v1
               </span>
+              {review.ai_provider && review.ai_model && (
+                <>
+                  {" "}+ AI{" "}
+                  <span className="text-slate-800 font-semibold">
+                    {review.ai_provider}
+                  </span>{" "}
+                  &bull;{" "}
+                  <span className="text-slate-800 font-mono">
+                    {review.ai_model}
+                  </span>{" "}
+                  &bull;{" "}
+                  <span>
+                    {(Number(review.ai_latency_ms || 0) / 1000).toFixed(1)} s
+                  </span>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -561,8 +676,8 @@ export function ContentDetailPage() {
 
       {/* Main Review Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column (7 cols): Latest Revision Body */}
-        <div className="lg:col-span-7 space-y-4">
+        {/* Left Column (6 cols): Latest Revision Body */}
+        <div className="lg:col-span-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900">
@@ -600,7 +715,7 @@ export function ContentDetailPage() {
               </span>
               {findings.length > 0 && (
                 <span className="italic text-slate-500">
-                  Tip: Click any highlighted text to jump to its rule card.
+                  Tip: Click highlighted text to inspect evidence.
                 </span>
               )}
             </div>
@@ -645,116 +760,250 @@ export function ContentDetailPage() {
           )}
         </div>
 
-        {/* Right Column (5 cols): Finding Cards List */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-900">
-              Claim Ledger & Findings
-            </h2>
-            <span className="text-xs text-slate-400">
-              {findings.length} {findings.length === 1 ? "finding" : "findings"}
-            </span>
-          </div>
-
-          {loading || reviewLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3 animate-pulse"
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="h-5 w-20 bg-slate-200 rounded" />
-                    <div className="h-4 w-16 bg-slate-100 rounded" />
-                  </div>
-                  <div className="h-7 w-3/4 bg-slate-100 rounded" />
-                  <div className="h-4 w-full bg-slate-100 rounded" />
-                </div>
-              ))}
-            </div>
-          ) : findings.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+        {/* Right Column (6 cols): Claim Ledger + Rule Findings */}
+        <div className="lg:col-span-6 space-y-6">
+          {/* SECTION 1: Claim Ledger (Requirement 2) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>Claim Ledger</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                    {claimFindings.length}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Verified claims with exact factual evidence and guidelines citations.
+                </p>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900">
-                {review ? "No issues detected" : "No review findings yet"}
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                {review
-                  ? "All evaluated claims and brand guidelines passed inspection."
-                  : "Click 'Run Vouch review' above to analyze this piece of content."}
-              </p>
+
+              {supportedCount > 0 && (
+                <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                  &check; {supportedCount} supported as proof
+                </span>
+              )}
             </div>
-          ) : (
-            <div className="space-y-4 max-h-[85vh] overflow-y-auto pr-1">
-              {sortedCards.map((finding) => {
-                const kindMeta = KIND_LABELS[finding.kind] ?? {
-                  label: finding.kind,
-                  className: "bg-slate-100 text-slate-800 border-slate-200",
-                };
 
-                const sevMeta = SEVERITY_BADGES[finding.severity] ?? {
-                  label: finding.severity,
-                  className: "bg-slate-100 text-slate-700 border-slate-200",
-                };
-
-                const isHighlighted = highlightedFindingId === finding.id;
-
-                return (
+            {loading || reviewLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
                   <div
-                    key={finding.id}
-                    id={`finding-card-${finding.id}`}
-                    className={`bg-white border rounded-xl p-5 shadow-sm transition-all duration-300 space-y-3.5 ${
-                      isHighlighted
-                        ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
-                        : "border-slate-200 hover:border-slate-300"
-                    }`}
+                    key={i}
+                    className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-2.5 animate-pulse"
                   >
-                    {/* Card Top: Badges & Severity */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="h-5 w-24 bg-slate-200 rounded" />
+                    <div className="h-4 w-3/4 bg-slate-100 rounded" />
+                    <div className="h-4 w-1/2 bg-slate-100 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : claimFindings.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-6 text-center shadow-sm">
+                <span className="text-xs font-semibold text-slate-500 block">
+                  {review ? "No claims identified in this revision." : "Review pending."}
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {claimFindings.map((finding) => {
+                  const v = finding.verdict || "unsupported";
+                  const vMeta = VERDICT_META[v] ?? {
+                    label: v,
+                    chipClass: "bg-slate-100 text-slate-800 border-slate-300",
+                    highlightClass: "",
+                  };
+
+                  const isHighlighted = highlightedFindingId === finding.id;
+                  const isSupported = v === "supported";
+
+                  return (
+                    <div
+                      key={finding.id}
+                      id={`finding-card-${finding.id}`}
+                      className={`bg-white border rounded-xl p-4 shadow-sm transition-all duration-300 space-y-2.5 ${
+                        isHighlighted
+                          ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
+                          : isSupported
+                          ? "border-emerald-200 bg-emerald-50/20"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      {/* Top: Quoted claim + Verdict chip */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                            Quoted Claim
+                          </span>
+                          <span className="font-mono text-sm font-bold text-slate-900">
+                            "{finding.span_text}"
+                          </span>
+                        </div>
+
                         <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded border ${kindMeta.className}`}
+                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border shrink-0 ${vMeta.chipClass}`}
                         >
-                          {kindMeta.label}
-                        </span>
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded border ${sevMeta.className}`}
-                        >
-                          {sevMeta.label}
+                          {vMeta.label}
                         </span>
                       </div>
 
-                      <span className="text-xs font-medium text-slate-400">
-                        {Math.round(finding.confidence * 100)}% confidence
-                      </span>
-                    </div>
+                      {/* Evidence Line: Fact and/or Rule citation */}
+                      <div className="space-y-1">
+                        {finding.fact_code && (
+                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-slate-900 font-mono">
+                                Fact {finding.fact_code}:
+                              </span>
+                              {finding.fact_valid_until && (
+                                <span className="text-[11px] font-medium text-slate-500">
+                                  Valid until: {new Date(finding.fact_valid_until).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-700 leading-snug">
+                              {finding.fact_statement || "Approved brand fact"}
+                            </p>
+                          </div>
+                        )}
 
-                    {/* Quoted span */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-                      <span className="text-xs text-slate-400 block mb-1 uppercase font-semibold tracking-wider">
-                        Flagged Text
-                      </span>
-                      <span className="font-mono text-sm font-semibold text-slate-900">
-                        "{finding.span_text}"
-                      </span>
-                    </div>
+                        {finding.rule_code && (
+                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
+                            <span className="font-bold text-slate-900 font-mono block">
+                              Rule {finding.rule_code}:
+                            </span>
+                            <p className="text-slate-700 leading-snug">
+                              {finding.rule_text || "Brand guidelines rule"}
+                            </p>
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Citation Line */}
-                    <div>
+                      {/* Reason */}
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {finding.reason}
+                      </p>
+
+                      {/* Suggested Fix */}
+                      {finding.suggested_fix && (
+                        <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2.5 flex items-start gap-2">
+                          <span className="font-semibold text-emerald-800 shrink-0">
+                            Suggested fix:
+                          </span>
+                          <span className="font-mono text-emerald-950 font-bold break-words">
+                            "{finding.suggested_fix}"
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Verdict Legend (Requirement 7) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1.5 leading-relaxed">
+                  <span className="font-bold text-slate-700">Verdicts:</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <strong>Supported:</strong> backed by in-date fact
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <strong>Outdated:</strong> fact expired
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <strong>Contradicted:</strong> conflicts with fact
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    <strong>Unsupported:</strong> unbacked claim
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    <strong>Needs judgement:</strong> regulated term/check
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: Rule Guidelines & Other Findings (Terms, Tone, Accessibility) */}
+          <div className="space-y-3 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <span>Brand Kit Rule Findings</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                    {ruleFindings.length}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Terminology, tone of voice, and accessibility checks.
+                </p>
+              </div>
+            </div>
+
+            {loading || reviewLoading ? (
+              <div className="h-20 bg-slate-100 rounded-xl animate-pulse" />
+            ) : ruleFindings.length === 0 ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                <span className="text-xs text-slate-500">
+                  No terminology or guideline violations detected.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ruleFindings.map((finding) => {
+                  const kindMeta = KIND_LABELS[finding.kind] ?? {
+                    label: finding.kind,
+                    className: "bg-slate-100 text-slate-800 border-slate-200",
+                  };
+                  const sevMeta = SEVERITY_BADGES[finding.severity] ?? {
+                    label: finding.severity,
+                    className: "bg-slate-100 text-slate-700 border-slate-200",
+                  };
+                  const isHighlighted = highlightedFindingId === finding.id;
+
+                  return (
+                    <div
+                      key={finding.id}
+                      id={`finding-card-${finding.id}`}
+                      className={`bg-white border rounded-xl p-4 shadow-sm transition-all duration-300 space-y-2.5 ${
+                        isHighlighted
+                          ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-xs font-semibold px-2 py-0.5 rounded border ${kindMeta.className}`}
+                          >
+                            {kindMeta.label}
+                          </span>
+                          <span
+                            className={`text-xs font-semibold px-2 py-0.5 rounded border ${sevMeta.className}`}
+                          >
+                            {sevMeta.label}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-400 font-medium">
+                          {Math.round(finding.confidence * 100)}% confidence
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">
+                          Flagged Span
+                        </span>
+                        <span className="font-mono text-xs font-bold text-slate-900">
+                          "{finding.span_text}"
+                        </span>
+                      </div>
+
                       {finding.rule_code ? (
                         <div className="text-xs text-slate-700 bg-slate-100/70 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
                           <span className="font-bold text-slate-900 font-mono block">
@@ -769,29 +1018,27 @@ export function ContentDetailPage() {
                           Suggestion (no rule cited)
                         </div>
                       )}
+
+                      <p className="text-xs text-slate-600 leading-snug">
+                        {finding.reason}
+                      </p>
+
+                      {finding.suggested_fix && (
+                        <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2 flex items-start gap-2">
+                          <span className="font-semibold text-emerald-800 shrink-0">
+                            Suggested fix:
+                          </span>
+                          <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono text-emerald-950 font-bold break-all">
+                            {finding.suggested_fix}
+                          </code>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Reason */}
-                    <p className="text-sm text-slate-700 leading-snug">
-                      {finding.reason}
-                    </p>
-
-                    {/* Suggested Fix */}
-                    {finding.suggested_fix && (
-                      <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2.5 flex items-start gap-2">
-                        <span className="font-semibold text-emerald-800 shrink-0">
-                          Suggested fix:
-                        </span>
-                        <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono text-emerald-950 font-bold break-all">
-                          {finding.suggested_fix}
-                        </code>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
