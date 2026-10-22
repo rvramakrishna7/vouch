@@ -52,6 +52,13 @@ Vouch is an evidence-first brand-governance reviewer. A Brand Manager builds a B
 
 STOP and report (do not improvise) when: a precondition fails, a secret is needed, a command fails twice, a requirement is unclear, or the task conflicts with this file or the decision log.
 
+## 7a. Honest reporting (owner's rule, mandatory)
+1. **A test is PASS only if you ran it in THIS task and pasted its output.** A successful build, typecheck, or "the code is implemented" is NOT a test pass.
+2. Acceptance tests (TEST-001..) that need a browser on the live app are checked by the owner. In your report write them as `PENDING OWNER CHECK`, never PASS.
+3. Use exactly one of: `PASS (evidence: <command/output>)`, `FAIL`, `NOT RUN`, `PENDING OWNER CHECK`.
+4. **Never write names, emails, IDs, codes or numbers from memory.** Copy them from files (e.g. `docs/demo-brand.md`) or from command output. The demo users are: Priya Sharma (brand_manager), Arjun Mehta (creator), Neha Iyer (reviewer). There is no "Meera Patel".
+5. If you are not sure something works, say so. An honest "not verified" is better than a wrong PASS.
+
 ## 8. Git rules
 - Repo root is this folder. Default branch `main`.
 - One task = one branch (`feat/...`, `fix/...`, `docs/...`, `chore/...`). Merge to `main` with `git merge --no-ff` only after the task's checks pass.
@@ -74,7 +81,7 @@ Files changed: <list>
 Commands run and results (VERBATIM, last relevant lines):
   $ <command>
   <output>
-Tests: <ids> PASS/FAIL with evidence
+Tests: <id>: PASS (evidence) | FAIL | NOT RUN | PENDING OWNER CHECK (see section 7a)
 Manual check: <exact steps the owner can repeat, and the expected result>
 Deviations from the prompt: <none | list with reason>
 Decisions needed: <none | DEC-xxx (Proposed): problem, options, recommendation>
