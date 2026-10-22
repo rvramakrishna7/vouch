@@ -1,50 +1,45 @@
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext.js";
+import { ProtectedLayout, getRoleHome } from "./components/ProtectedLayout.js";
+import { LoginPage } from "./pages/LoginPage.js";
+import { ContentPage } from "./pages/ContentPage.js";
+import { ReviewsPage } from "./pages/ReviewsPage.js";
+import { BrandKitPage } from "./pages/BrandKitPage.js";
 
-const API_URL = import.meta.env.VITE_API_URL ?? ''
+function CatchAllRedirect() {
+  const { user, loading } = useAuth();
 
-type HealthState =
-  | { kind: 'loading' }
-  | { kind: 'ok'; data: unknown }
-  | { kind: 'error'; message: string }
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-sm font-medium text-slate-500">Loading…</div>
+      </div>
+    );
+  }
 
-function App() {
-  const [health, setHealth] = useState<HealthState>({ kind: 'loading' })
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`${API_URL}/api/health`, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setHealth({ kind: 'ok', data: await res.json() })
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        setHealth({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
-      })
-    return () => controller.abort()
-  }, [])
-
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-6 bg-slate-50 p-8 text-slate-900">
-      <h1 className="text-4xl font-bold tracking-tight text-center">
-        Vouch — Every claim, backed by proof.
-      </h1>
-      <p className="text-sm text-slate-600" aria-live="polite">
-        <span className="font-semibold">API status: </span>
-        {health.kind === 'loading' && <span>checking…</span>}
-        {health.kind === 'ok' && (
-          <code className="rounded bg-emerald-100 px-2 py-1 text-emerald-800">
-            {JSON.stringify(health.data)}
-          </code>
-        )}
-        {health.kind === 'error' && (
-          <code className="rounded bg-red-100 px-2 py-1 text-red-800">
-            error: {health.message}
-          </code>
-        )}
-      </p>
-    </main>
-  )
+  return <Navigate to={getRoleHome(user.role)} replace />;
 }
 
-export default App
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<ProtectedLayout />}>
+            <Route path="/content" element={<ContentPage />} />
+            <Route path="/reviews" element={<ReviewsPage />} />
+            <Route path="/brand-kit" element={<BrandKitPage />} />
+          </Route>
+          <Route path="*" element={<CatchAllRedirect />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;
