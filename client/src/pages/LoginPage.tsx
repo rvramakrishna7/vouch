@@ -70,7 +70,7 @@ export function LoginPage() {
           Every claim, backed by proof.
         </p>
         <p className="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
-          Vouch checks marketing content against your brand&apos;s approved facts
+          Vouch checks marketing content against your brand's approved facts
           and rules before it is published.
         </p>
       </div>

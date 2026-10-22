@@ -154,7 +154,7 @@ export function ReviewsPage() {
                       to={`/content/${item.id}`}
                       className="text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
                     >
-                      Review &rarr;
+                      Review →
                     </Link>
                   </td>
                 </tr>

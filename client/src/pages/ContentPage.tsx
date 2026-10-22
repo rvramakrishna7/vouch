@@ -172,7 +172,7 @@ export function ContentPage() {
                       to={`/content/${item.id}`}
                       className="text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
                     >
-                      View &rarr;
+                      View →
                     </Link>
                   </td>
                 </tr>
