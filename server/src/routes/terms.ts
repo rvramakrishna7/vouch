@@ -11,14 +11,18 @@ termsRouter.use(requireAuth);
 const createTermSchema = z.object({
   term: z.string().min(1),
   type: z.enum(["preferred", "banned", "regulated"]),
-  replacement: z.string().optional(),
+  replacement: z.string().nullable().optional(),
+  rule_code: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
 });
 
 const patchTermSchema = z
   .object({
     term: z.string().min(1).optional(),
     type: z.enum(["preferred", "banned", "regulated"]).optional(),
-    replacement: z.string().optional(),
+    replacement: z.string().nullable().optional(),
+    rule_code: z.string().nullable().optional(),
+    note: z.string().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided",
@@ -30,10 +34,12 @@ termsRouter.get("/", async (req: Request, res: Response) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, organization_id, term, type, replacement, created_at
-       FROM terms
-       WHERE organization_id = $1
-       ORDER BY term ASC`,
+      `SELECT t.id, t.organization_id, t.term, t.type, t.replacement,
+              t.rule_id, r.code AS rule_code, t.note, t.created_at
+       FROM terms t
+       LEFT JOIN rules r ON t.rule_id = r.id
+       WHERE t.organization_id = $1
+       ORDER BY t.term ASC`,
       [orgId],
     );
 
@@ -51,9 +57,11 @@ termsRouter.get("/:id", async (req: Request, res: Response) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, organization_id, term, type, replacement, created_at
-       FROM terms
-       WHERE id = $1 AND organization_id = $2`,
+      `SELECT t.id, t.organization_id, t.term, t.type, t.replacement,
+              t.rule_id, r.code AS rule_code, t.note, t.created_at
+       FROM terms t
+       LEFT JOIN rules r ON t.rule_id = r.id
+       WHERE t.id = $1 AND t.organization_id = $2`,
       [id, orgId],
     );
 
@@ -78,25 +86,43 @@ termsRouter.post("/", requireRole("brand_manager"), async (req: Request, res: Re
     });
   }
 
-  const { term, type, replacement } = parseResult.data;
+  const { term, type, replacement, rule_code, note } = parseResult.data;
   const orgId = req.user!.organizationId;
 
   try {
+    let ruleId: string | null = null;
+    if (rule_code) {
+      const { rows: ruleRows } = await pool.query<{ id: string }>(
+        "SELECT id FROM rules WHERE code = $1 AND organization_id = $2",
+        [rule_code, orgId],
+      );
+      if (ruleRows.length === 0) {
+        return res.status(400).json({
+          error: "invalid_input",
+          details: `Rule ${rule_code} not found in this organization`,
+        });
+      }
+      ruleId = ruleRows[0].id;
+    }
+
     const { rows } = await pool.query(
-      `INSERT INTO terms (organization_id, term, type, replacement)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, organization_id, term, type, replacement, created_at`,
-      [orgId, term, type, replacement ?? null],
+      `INSERT INTO terms (organization_id, term, type, replacement, rule_id, note)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, organization_id, term, type, replacement, rule_id, note, created_at`,
+      [orgId, term, type, replacement ?? null, ruleId, note ?? null],
     );
 
-    const createdTerm = rows[0];
+    const createdTerm = {
+      ...rows[0],
+      rule_code: rule_code ?? null,
+    };
 
     await logAudit({
       organizationId: orgId,
       actor: req.user!.id,
       action: "terms.create",
       entity: `term:${createdTerm.id}`,
-      payload: { term: createdTerm.term, type: createdTerm.type },
+      payload: { term: createdTerm.term, type: createdTerm.type, rule_code },
     });
 
     return res.status(201).json(createdTerm);
@@ -118,24 +144,66 @@ termsRouter.patch("/:id", requireRole("brand_manager"), async (req: Request, res
 
   const orgId = req.user!.organizationId;
   const { id } = req.params;
-  const { term, type, replacement } = parseResult.data;
+  const { term, type, replacement, rule_code, note } = parseResult.data;
 
   try {
+    let ruleIdUpdate: string | null | undefined = undefined;
+    if (rule_code !== undefined) {
+      if (rule_code === null || rule_code.trim() === "") {
+        ruleIdUpdate = null;
+      } else {
+        const { rows: ruleRows } = await pool.query<{ id: string }>(
+          "SELECT id FROM rules WHERE code = $1 AND organization_id = $2",
+          [rule_code, orgId],
+        );
+        if (ruleRows.length === 0) {
+          return res.status(400).json({
+            error: "invalid_input",
+            details: `Rule ${rule_code} not found in this organization`,
+          });
+        }
+        ruleIdUpdate = ruleRows[0].id;
+      }
+    }
+
     const { rows } = await pool.query(
       `UPDATE terms
        SET term = COALESCE($3, term),
            type = COALESCE($4, type),
-           replacement = CASE WHEN $5::text IS NULL THEN replacement ELSE $5 END
+           replacement = CASE WHEN $5::text IS NULL AND $6 = true THEN NULL WHEN $5::text IS NOT NULL THEN $5 ELSE replacement END,
+           rule_id = CASE WHEN $7 = true THEN $8::uuid ELSE rule_id END,
+           note = CASE WHEN $9::text IS NULL AND $10 = true THEN NULL WHEN $9::text IS NOT NULL THEN $9 ELSE note END
        WHERE id = $1 AND organization_id = $2
-       RETURNING id, organization_id, term, type, replacement, created_at`,
-      [id, orgId, term ?? null, type ?? null, replacement ?? null],
+       RETURNING id, organization_id, term, type, replacement, rule_id, note, created_at`,
+      [
+        id,
+        orgId,
+        term ?? null,
+        type ?? null,
+        replacement ?? null,
+        replacement !== undefined,
+        rule_code !== undefined,
+        ruleIdUpdate ?? null,
+        note ?? null,
+        note !== undefined,
+      ],
     );
 
     if (rows.length === 0) {
       return res.status(404).json({ error: "not_found" });
     }
 
-    const updated = rows[0];
+    // Fetch updated row with rule_code
+    const { rows: fullRows } = await pool.query(
+      `SELECT t.id, t.organization_id, t.term, t.type, t.replacement,
+              t.rule_id, r.code AS rule_code, t.note, t.created_at
+       FROM terms t
+       LEFT JOIN rules r ON t.rule_id = r.id
+       WHERE t.id = $1 AND t.organization_id = $2`,
+      [id, orgId],
+    );
+
+    const updated = fullRows[0];
 
     await logAudit({
       organizationId: orgId,

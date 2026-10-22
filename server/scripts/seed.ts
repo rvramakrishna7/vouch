@@ -152,6 +152,13 @@ async function runSeed() {
       );
     }
 
+    // Query inserted rules for Aqualeaf to map rule_code -> rule_id
+    const { rows: aqRules } = await client.query<{ id: string; code: string }>(
+      "SELECT id, code FROM rules WHERE organization_id = $1",
+      [aqualeafId],
+    );
+    const ruleCodeToId = new Map(aqRules.map((r) => [r.code, r.id]));
+
     // Facts for Aqualeaf (8 facts)
     const facts = [
       {
@@ -212,60 +219,85 @@ async function runSeed() {
       );
     }
 
-    // Terms for Aqualeaf (9 terms)
-    const terms = [
+    // Terms for Aqualeaf (9 terms) matching docs/demo-brand.md exactly
+    const terms: Array<{
+      term: string;
+      type: "preferred" | "banned" | "regulated";
+      rule_code: string | null;
+      replacement: string | null;
+      note: string | null;
+    }> = [
       {
         term: "No.1",
         type: "banned",
-        replacement: "Remove, or cite an approved ranking fact (CLAIM-01)",
+        rule_code: "CLAIM-01",
+        replacement: null,
+        note: "Remove, or cite an approved ranking fact",
       },
       {
         term: "best in India",
         type: "banned",
-        replacement: "Remove (CLAIM-01)",
+        rule_code: "CLAIM-01",
+        replacement: null,
+        note: "Remove; superlatives need a ranking fact",
       },
       {
         term: "100% natural",
         type: "banned",
-        replacement: "Remove (not applicable to steel products)",
+        rule_code: "CLAIM-02",
+        replacement: null,
+        note: "Not applicable to steel products",
       },
       {
         term: "guaranteed",
         type: "banned",
+        rule_code: "CLAIM-03",
         replacement: "tested",
+        note: "Avoid absolute promises",
       },
       {
         term: "chemical-free",
         type: "banned",
-        replacement: 'Name the specific attribute, e.g. "BPA-free lid" (F-20)',
+        rule_code: "CLAIM-02",
+        replacement: "BPA-free lid",
+        note: "Name the specific attribute (F-20)",
       },
       {
         term: "eco-friendly",
         type: "regulated",
-        replacement: "Allowed only with a specific supporting fact (CLAIM-02)",
+        rule_code: "CLAIM-02",
+        replacement: null,
+        note: "Allowed only with a specific supporting fact",
       },
       {
         term: "sustainable",
         type: "regulated",
-        replacement: "Allowed only with a specific supporting fact (CLAIM-02)",
+        rule_code: "CLAIM-02",
+        replacement: null,
+        note: "Allowed only with a specific supporting fact",
       },
       {
         term: "metal flask",
         type: "banned",
-        replacement: '"steel bottle" (TERM-02)',
+        rule_code: "TERM-02",
+        replacement: "steel bottle",
+        note: "Use the brand's product term",
       },
       {
         term: "Aqualeaf",
         type: "preferred",
-        replacement: "Exact spelling (TERM-01)",
+        rule_code: "TERM-01",
+        replacement: "Aqualeaf",
+        note: 'Exact spelling; flag variants like "AquaLeaf" or "Aqua Leaf"',
       },
     ];
 
     for (const term of terms) {
+      const ruleId = term.rule_code ? ruleCodeToId.get(term.rule_code) ?? null : null;
       await client.query(
-        `INSERT INTO terms (organization_id, term, type, replacement)
-         VALUES ($1, $2, $3, $4)`,
-        [aqualeafId, term.term, term.type, term.replacement],
+        `INSERT INTO terms (organization_id, term, type, replacement, rule_id, note)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [aqualeafId, term.term, term.type, term.replacement, ruleId, term.note],
       );
     }
 
