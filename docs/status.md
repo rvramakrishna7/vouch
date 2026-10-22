@@ -9,10 +9,10 @@ Updated by the worker at the end of every task. Planner and owner read it first.
 ## Current state
 Monorepo scaffolded and deployed on Vercel. `client/` (Vite + React + TS + Tailwind v4 + React Router) has one-click demo login, persistent session management, role routing, navigation bar, Brand Kit management, and complete content submission workflow. `server/` (Express + TS, ESM on Vercel Functions, region bom1) connects to Supabase PostgreSQL in Mumbai.
 
-Database schema (001_init.sql with pgvector, DEC-013 offsets, tenant isolation, and audit_events append-only trigger) and RLS (002_enable_rls.sql on all 13 tables) applied to Supabase PostgreSQL. Demo brand ("Aqualeaf" and "Northwind Labs") seeded idempotently.
+Database schema (001_init.sql with pgvector, DEC-013 offsets, tenant isolation, audit_events append-only trigger; 002_enable_rls.sql on all tables; 003_terms_rules.sql adding rule_id and note to terms) applied to Supabase PostgreSQL. Demo brand ("Aqualeaf" and "Northwind Labs") seeded idempotently.
 
 Full Brand Kit experience implemented:
-- Server API (`/api/rules`, `/api/facts`, `/api/terms`): auto-numbering, version incrementing, expired date evaluation, and audit logging.
+- Server API (`/api/rules`, `/api/facts`, `/api/terms`): auto-numbering, version incrementing, expired date evaluation, optional rule_code and note on terms, and audit logging.
 - Client UI (`/brand-kit`):
   - Accessible via top nav by all roles. Read-only banner shown for Creator and Reviewer.
   - Rules tab: code, category, severity badges (high red, medium amber, low grey), text, version, status, "Add rule" form, inline edit, and archive.
@@ -30,15 +30,24 @@ Content submission experience (S5a API & S5b UI) completed and live:
   - `/content/new` (Creator only): form with Title, Channel select, Audience, Purpose (with helper text), Body (live character counter), "Upload .docx" button calling extraction endpoint with size/type validation, "Use sample caption" button pre-filling the worked example, Save -> navigates to `/content/:id`.
   - `/content/:id` (All roles): displays content metadata (channel, audience, purpose, creator, updated time), latest revision body in a clean readable box, expandable previous revisions history, disabled "Run Vouch review" button ("Coming in the next step.").
   - `/reviews` (Reviewer home): organization-wide review queue showing all submitted content with status badges, linking each to `/content/:id`.
-  - Role-based Navigation in Header:
-    - Creator: Content, Brand Kit
-    - Reviewer: Reviews, Brand Kit
-    - Brand Manager: Brand Kit, Reviews (read)
-- Vitest suite: 31/31 tests passing across 5 test suites.
-- Client build: `tsc -b && vite build` passing with 0 errors.
+  - Role-based Navigation in Header: Creator (Content, Brand Kit), Reviewer (Reviews, Brand Kit), Brand Manager (Brand Kit, Reviews (read)).
+
+Rule-based review engine and review API (S6a) completed and live:
+- Database: Migration `003_terms_rules.sql` added `rule_id` (FK to rules) and `note` (TEXT) to `terms`.
+- Seed: Idempotently seeded terms with exact rule links (`CLAIM-01`, `CLAIM-02`, `CLAIM-03`, `TERM-01`, `TERM-02`) and guidance notes from `docs/demo-brand.md`.
+- Pure engine (`server/src/engine/ruleChecks.ts`):
+  - Terms: whole-phrase case-insensitive matching; banned and regulated flag occurrences; preferred flags spelling/casing variants (e.g. `AquaLeaf`) while leaving exact match (`Aqualeaf`) unflagged; incorporates notes and suggested fixes.
+  - TONE-02: detects 3+ letter words in ALL CAPS (ignoring allowlist `BPA`, `ASCI`, `USA`, `UK`, `CEO`, `FAQ`, `ISO`); flags second `!` when more than one exclamation mark is present in text.
+  - ACC-01: flags sentences longer than 25 words with sentence boundary detection.
+  - ACC-02: flags lowercase hashtags of 10+ letters with CamelCase recommendation and 0.6 confidence.
+  - Enforces Invariant 1: cites active rules with their severity; missing/archived rules become suggestions without citations.
+- Review endpoints (`server/src/routes/contents.ts`):
+  - `POST /api/contents/:id/reviews`: executes rule checks on latest revision, transactionally persists review record (`provider: "rules"`, `model: "vouch-rules-v1"`) and findings, records append-only audit event (`review.run`).
+  - `GET /api/contents/:id/reviews/latest`: returns latest review and findings joined with rule code and rule text.
+- Vitest suite: 37/37 tests passing across 6 test suites.
 
 Verified row counts:
-- schema_migrations: 2
+- schema_migrations: 3
 - organizations: 2
 - users: 4
 - rules: 10
@@ -46,11 +55,11 @@ Verified row counts:
 - terms: 9
 - contents: 2
 - revisions: 2
-- reviews: 0
-- findings: 0
+- reviews: 1 (after live test)
+- findings: 3 (after live test)
 - comments: 0
 - approvals: 0
-- audit_events: 2 (base seed)
+- audit_events: 3 (base seed + live test review)
 
 ## Steps
 | Step | Name | Target | Status |
@@ -61,7 +70,7 @@ Verified row counts:
 | S3 | Auth, roles, one-click demo logins | 22 Oct | Done: S3a (server auth, roles, demo login, RLS) and S3b (client login, demo buttons, app shell, role routing) |
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Done: S4a (server API live) and S4b (interactive Brand Kit UI for all roles) |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
-| S6 | Rule-based engine (terms, expired facts, readability) | 23 Oct | Pending |
+| S6 | Rule-based engine (terms, expired facts, readability) | 23 Oct | S6a done (migration 003, rule engine, review API live, 37 vitest tests passing) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Pending |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Pending |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
@@ -71,7 +80,7 @@ Verified row counts:
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S6: Rule-based engine (terms, expired facts, readability).
+S6b / S7: Rule-based findings UI or AI adapter (Gemini + Groq fallback + zod).
 
 ## Open issues
 none
