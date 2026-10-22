@@ -78,7 +78,7 @@ AI adapter and Fact Embeddings (S7) completed and live:
 - AI Status API (`GET /api/ai/status`):
   - Secured with `requireAuth`. Verified live returning `{gemini: {ok: true, model: "gemini-3.5-flash"}, groq: {ok: true, model: "openai/gpt-oss-120b"}, embeddings: {ok: true, model: "gemini-embedding-001", dims: 768}}`.
 
-Claim Ledger pipeline (S8a) completed and live:
+Claim Ledger pipeline (S8a & S8a.1) completed and live:
 - Database: Migration `004_review_ai_columns.sql` applied to Supabase PostgreSQL, adding `ai_status`, `ai_provider`, `ai_model`, and `ai_latency_ms` to `reviews`.
 - Pipeline implementation (`server/src/ledger/`):
   - Sentence splitting with precise character offsets via native `Intl.Segmenter` (`server/src/ledger/sentences.ts`).
@@ -91,6 +91,18 @@ Claim Ledger pipeline (S8a) completed and live:
     - `unsupported` claims cite active claims rules (unmatched rule becomes suggestion without violation per Invariant 1).
     - `contradicted` and `outdated` claims automatically cite active rule `CLAIM-03`.
     - Severity mapped to rule severity; `supported` claims set to `low`.
+- AI Latency Optimization (S8a.1, DEC-021 Accepted):
+  - Benchmark of 5 model configurations on seeded draft ("Instagram caption: Flow launch"):
+    - Config A (gemini-3.5-flash, thinkingLevel: MINIMAL): 4.54s / 4.05s / 3.78s (4/5 verdicts)
+    - Config B (gemini-3.5-flash-lite, thinkingLevel: MINIMAL): 2.60s / 2.90s / 2.51s (5/5 verdicts on all 3 runs - WINNER)
+    - Config C (Groq openai/gpt-oss-120b, reasoning_effort: low): 2.24s / 2.13s / 2.38s (2-4/5 verdicts)
+    - Config D (Groq qwen/qwen3.8-27b): 1.66s / 1.86s / 2.21s (4-5/5 verdicts)
+    - Config E (Baseline gemini-3.5-flash, unconstrained): 7.34s / 11.51s / 2.29s (0-5/5 verdicts)
+  - Code-level default in server/src/ai/adapter.ts set to DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite" with DEFAULT_GEMINI_THINKING = "MINIMAL".
+  - Live API review verification on seeded draft (8c321adb-119b-403b-8b2a-2bdfb3fad344):
+    - Run 1: Total time 6.29s, Server-Timing: ai;dur=3554.0, db;dur=137.2, total;dur=6086.4 (AI step 3.55s)
+    - Run 2: Total time 3.16s, Server-Timing: ai;dur=2237.0, db;dur=96.6, total;dur=2807.4 (AI step 2.24s)
+    - All 5 claims extracted and verified with 100% accuracy on both live runs.
 - Server API updates (`server/src/routes/contents.ts`):
   - `POST /api/contents/:id/reviews` runs rule checks and Claim Ledger in parallel, saves review with AI execution columns, batch-inserts all findings, and logs audit event.
   - `GET /api/contents/:id/reviews/latest` returns review AI disclosure and findings joined with both `rules` and `facts` (`fact_code`, `fact_statement`, `fact_valid_until`).
@@ -132,7 +144,7 @@ Verified row counts:
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
-| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Done: S8a server pipeline live, DEC-020 accepted, live review passes on seeded draft |
+| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) & latency | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency reduced from 17.6s to 2.2s with gemini-3.5-flash-lite, DEC-021) |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
