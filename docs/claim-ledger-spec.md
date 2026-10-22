@@ -17,6 +17,8 @@ Owner-approved spec for the core of Vouch. Implements DEC-005 with the faster pi
    - Find `quote` in the text (use `occurrence`, default 1) and compute offsets. Not found -> verdict `needs_human_judgement`.
    - supported / contradicted / outdated need a `fact_code` that is in the candidate set; otherwise -> `needs_human_judgement`.
    - Expiry is decided by code from `valid_until` vs today, not by the model: if the cited fact is expired, verdict becomes `outdated` (even if the model said supported); if the model said outdated but the fact is not expired -> `needs_human_judgement`.
+   - Regulated terms guard: if the model says supported and the quote contains a Brand Kit term of type "regulated" (case-insensitive), set verdict to needs_human_judgement with reason "Regulated term: a reviewer must confirm the specific attribute is stated in the text."
+   - Numeric cross-check: extract number+unit pairs (units: %, percent, hour/hours/hr, minute/minutes, day/days, year/years, kg, g, ml, l/litre/liter) from the claim quote and from the candidate facts retrieved for that sentence. If a fact has the SAME unit but none of its numbers equals the claim's number, set verdict = contradicted, cite that fact and rule CLAIM-03. This applies whatever the model said (overriding a wrong "supported" or "unsupported"). If numbers match, leave the model's verdict.
    - unsupported must cite an active claims rule; otherwise rule_code = null (suggestion only, invariant 1).
    - contradicted and outdated cite rule `CLAIM-03` when it is active.
    - Severity = the cited rule's severity; supported claims get severity `low` and are shown as "Supported", not as issues. `needs_human_judgement` gets `medium`.

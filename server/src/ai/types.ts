@@ -25,7 +25,10 @@ export interface GenerateJsonOptions<T> {
   user: string;
   schema: z.ZodType<T>;
   timeoutMs?: number;
+  primaryTimeoutMs?: number;
+  fallbackTimeoutMs?: number;
   preferredProvider?: "gemini" | "groq";
+  temperature?: number;
 }
 
 export interface GenerateJsonResult<T> {

@@ -80,6 +80,52 @@ describe("AI Adapter and Fallback Pipeline", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("retries Groq once when HTTP 429 has retry-after <= 5s", async () => {
+    let groqAttempt = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("api.groq.com")) {
+        groqAttempt++;
+        if (groqAttempt === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: "rate limit" }), {
+              status: 429,
+              headers: { "Content-Type": "application/json", "retry-after": "0.1" },
+            }),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({ verdict: "groq_recovered", score: 100 }),
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
+    });
+
+    globalThis.fetch = fetchMock;
+
+    const result = await generateJson({
+      system: "System test",
+      user: "User test",
+      schema: sampleSchema,
+      preferredProvider: "groq",
+    });
+
+    expect(result.provider).toBe("groq");
+    expect(result.data.verdict).toBe("groq_recovered");
+    expect(groqAttempt).toBe(2);
+  });
+
   it("retries invalid JSON once on same provider, then throws AiInvalidOutputError if still invalid", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string | URL) => {
       const urlStr = url.toString();
