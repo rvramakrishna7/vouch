@@ -183,6 +183,19 @@ Suggested replacements and Guidance separation (S9a.1) completed and live:
     "India's No.1 eco-friendly water bottle, now 40% lighter. Rated 4.8 out of 5 by customers (as of June 2026)! Keeps drinks cold for 24 hours. #stayhydrated"
 - Vitest suite: 62/62 tests passing across 10 test files in Vitest.
 
+Fact-checking replacements (S9a.2) completed:
+- Code and Spec (`server/src/ledger/pipeline.ts` & `docs/claim-ledger-spec.md`):
+  - Added `factCheckReplacement` enforcing 4 deterministic guards on candidate replacements:
+    a) Verdict is outdated -> replacement nulled with note ("Expired facts cannot be reused in a suggested fix.");
+    b) `runRuleChecks` finds a banned term -> replacement nulled with note;
+    c) Replacement contains a regulated term but no number in an in-date candidate fact -> replacement nulled with note;
+    d) Replacement contains any number that does not appear in an in-date candidate fact -> replacement nulled with note.
+  - Note appended to creator guidance; genuine fact-checked replacements (such as "Keeps drinks cold for 24 hours." backed by F-15) preserved.
+- Benchmark (5 runs with 10s pauses):
+  - 5/5 runs completed (100% accuracy across all 5 claims).
+  - Outdated claims and vague regulated claims produce zero invalid replacements; verified replacements cleanly substituted into caption sentences.
+- Vitest suite: 67/67 tests passing across 10 test files in Vitest.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -210,7 +223,7 @@ Verified row counts:
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
-| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a & S9a.1 (server resolutions, revisions API, literal replacements & dedupe done and live) |
+| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a, S9a.1 & S9a.2 (server resolutions, revisions API, literal replacements & fact-checking done and live) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
