@@ -78,8 +78,36 @@ AI adapter and Fact Embeddings (S7) completed and live:
 - AI Status API (`GET /api/ai/status`):
   - Secured with `requireAuth`. Verified live returning `{gemini: {ok: true, model: "gemini-3.5-flash"}, groq: {ok: true, model: "openai/gpt-oss-120b"}, embeddings: {ok: true, model: "gemini-embedding-001", dims: 768}}`.
 
+Claim Ledger pipeline (S8a) completed and live:
+- Database: Migration `004_review_ai_columns.sql` applied to Supabase PostgreSQL, adding `ai_status`, `ai_provider`, `ai_model`, and `ai_latency_ms` to `reviews`.
+- Pipeline implementation (`server/src/ledger/`):
+  - Sentence splitting with precise character offsets via native `Intl.Segmenter` (`server/src/ledger/sentences.ts`).
+  - Vector fact retrieval (`server/src/ledger/retrieve.ts`): embeds all sentences in 1 batch call, queries top 3 facts per sentence using pgvector cosine distance (`<=>`), deduplicates and returns top 12 candidate facts.
+  - Single-call extraction and verification (`server/src/ledger/pipeline.ts`): extracts claims and verifies against candidate facts and active claims rules in ONE `generateJson` call using `gemini-3.5-flash`.
+  - Invariant 2 strict code validation:
+    - Locates quoted spans and calculates start/end offsets (unmatched quotes become `needs_human_judgement`).
+    - Validates fact code against candidate facts (missing fact becomes `needs_human_judgement`).
+    - Expiry evaluated in code from `valid_until` vs current date: expired facts force verdict to `outdated`; claims marked outdated against in-date facts become `needs_human_judgement`.
+    - `unsupported` claims cite active claims rules (unmatched rule becomes suggestion without violation per Invariant 1).
+    - `contradicted` and `outdated` claims automatically cite active rule `CLAIM-03`.
+    - Severity mapped to rule severity; `supported` claims set to `low`.
+- Server API updates (`server/src/routes/contents.ts`):
+  - `POST /api/contents/:id/reviews` runs rule checks and Claim Ledger in parallel, saves review with AI execution columns, batch-inserts all findings, and logs audit event.
+  - `GET /api/contents/:id/reviews/latest` returns review AI disclosure and findings joined with both `rules` and `facts` (`fact_code`, `fact_statement`, `fact_valid_until`).
+  - Server-Timing includes `ai;dur=...` entry.
+- Live verification on seeded draft ("Instagram caption: Flow launch"):
+  - Total request time: 18.83s (`Server-Timing: ai;dur=17587.0, db;dur=319.0, total;dur=18387.6`)
+  - Review metadata: `ai_status: "ok"`, `ai_provider: "gemini"`, `ai_model: "gemini-3.5-flash"`, `ai_latency_ms: 17587`.
+  - All 5 claims matched expected verdicts:
+    - "India's No.1": `unsupported` (cites `CLAIM-01`)
+    - "eco-friendly": `unsupported` (cites `CLAIM-02`, suggested fix: "made from 70% recycled stainless steel")
+    - "now 40% lighter": `supported` (cites `F-12`, severity `low`)
+    - "Rated 4.8 by our customers!": `outdated` (cites `F-03` + `CLAIM-03`)
+    - "Keeps drinks cold for 48 hours.": `contradicted` (cites `F-15` + `CLAIM-03`, suggested fix: "Keeps drinks cold for 24 hours.")
+- Unit test suite: 46/46 tests passing across 8 test files in Vitest.
+
 Verified row counts:
-- schema_migrations: 3
+- schema_migrations: 4
 - organizations: 2
 - users: 4
 - rules: 10
@@ -87,11 +115,11 @@ Verified row counts:
 - terms: 9
 - contents: 2
 - revisions: 2
-- reviews: 1
-- findings: 3
+- reviews: 2 (base seed review + live Claim Ledger review)
+- findings: 11
 - comments: 0
 - approvals: 0
-- audit_events: 3
+- audit_events: 4
 
 ## Steps
 | Step | Name | Target | Status |
@@ -104,7 +132,7 @@ Verified row counts:
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Done: S5a (server API live, 31 tests passing) and S5b (content UI screens & nav live) |
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
-| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Pending |
+| S8 | Claim Ledger pipeline (extract, retrieve, verify, validate) | 23 Oct | Done: S8a server pipeline live, DEC-020 accepted, live review passes on seeded draft |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Pending |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
@@ -112,7 +140,7 @@ Verified row counts:
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S8: Claim Ledger pipeline (extract, retrieve via pgvector, verify with AI, validate in code).
+S8b / S9: Findings UI updates for Claim Ledger findings, fact cards, and fix acceptance flow.
 
 ## Open issues
 none
