@@ -68,13 +68,13 @@ describe.runIf(hasDb)("Database schema and invariants", () => {
     expect(aqTerms.c).toBe(9);
 
     const { rows: [aqContents] } = await pool.query<{ c: number }>(
-      "SELECT count(*)::int as c FROM contents WHERE organization_id = $1",
+      "SELECT count(*)::int as c FROM contents WHERE organization_id = $1 AND title = 'Instagram caption: Flow launch'",
       [aqualeaf.id],
     );
     expect(aqContents.c).toBe(1);
 
     const { rows: [aqRevisions] } = await pool.query<{ c: number }>(
-      "SELECT count(*)::int as c FROM revisions WHERE organization_id = $1",
+      "SELECT count(*)::int as c FROM revisions r JOIN contents c ON c.id = r.content_id WHERE c.organization_id = $1 AND c.title = 'Instagram caption: Flow launch'",
       [aqualeaf.id],
     );
     expect(aqRevisions.c).toBe(1);
