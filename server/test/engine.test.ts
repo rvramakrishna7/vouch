@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import app from "../src/index.js";
 import pool from "../src/db/pool.js";
@@ -192,6 +192,45 @@ describe("runRuleChecks pure engine", () => {
 });
 
 describe.runIf(hasDb)("Review API (POST & GET reviews)", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    const mockVector768 = Array.from({ length: 768 }, () => 0.01);
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("batchEmbedContents")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              embeddings: Array(10).fill({ values: mockVector768 }),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (urlStr.includes("generateContent")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: JSON.stringify({ claims: [] }) }],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${urlStr}`));
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
   let creatorToken: string;
   let reviewerToken: string;
   let northwindToken: string;
