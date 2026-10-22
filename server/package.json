@@ -12,6 +12,7 @@
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@vercel/functions": "^3.10.3",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^5.3.0",

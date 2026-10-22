@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { attachDatabasePool } from "@vercel/functions";
+import { timingStorage } from "../middleware/timing.js";
 
 const { Pool } = pg;
 
@@ -48,5 +50,51 @@ export const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });
+
+// Attach database pool for Vercel Fluid Compute lifecycle management
+if (process.env.VERCEL) {
+  try {
+    attachDatabasePool(pool);
+  } catch {
+    // Ignore in environments where Vercel function context is absent
+  }
+}
+
+// Instrument pool.query to track database time in timingStorage
+const rawPoolQuery = pool.query.bind(pool);
+pool.query = (async (...args: any[]) => {
+  const start = performance.now();
+  try {
+    return await (rawPoolQuery as any)(...args);
+  } finally {
+    const store = timingStorage.getStore();
+    if (store) {
+      store.dbTime += performance.now() - start;
+    }
+  }
+}) as typeof pool.query;
+
+// Instrument pool.connect to track transaction client queries
+const rawPoolConnect = pool.connect.bind(pool);
+(pool as any).connect = ((callback?: any) => {
+  if (typeof callback === "function") {
+    return rawPoolConnect(callback);
+  }
+  return rawPoolConnect().then((client) => {
+    const rawClientQuery = client.query.bind(client);
+    client.query = (async (...args: any[]) => {
+      const start = performance.now();
+      try {
+        return await (rawClientQuery as any)(...args);
+      } finally {
+        const store = timingStorage.getStore();
+        if (store) {
+          store.dbTime += performance.now() - start;
+        }
+      }
+    }) as typeof client.query;
+    return client;
+  });
+}) as typeof pool.connect;
 
 export default pool;

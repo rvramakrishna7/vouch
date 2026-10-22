@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import { timingMiddleware } from "./middleware/timing.js";
 import authRouter from "./routes/auth.js";
 import contentsRouter from "./routes/contents.js";
 import factsRouter from "./routes/facts.js";
@@ -7,6 +8,9 @@ import rulesRouter from "./routes/rules.js";
 import termsRouter from "./routes/terms.js";
 
 const app = express();
+
+// Server-Timing instrumentation
+app.use(timingMiddleware);
 
 // CORS: only origins listed in CLIENT_ORIGIN (comma-separated) are allowed.
 const allowedOrigins = (process.env.CLIENT_ORIGIN ?? "")
@@ -21,6 +25,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
       return callback(null, false);
     },
+    exposedHeaders: ["Server-Timing"],
   }),
 );
 

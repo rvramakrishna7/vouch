@@ -45,9 +45,30 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const cached = sessionStorage.getItem("vouch_user");
+      return cached ? (JSON.parse(cached) as User) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [organization, setOrganization] = useState<Organization | null>(() => {
+    try {
+      const cached = sessionStorage.getItem("vouch_org");
+      return cached ? (JSON.parse(cached) as Organization) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // If token is present and user is cached, render immediately without full-page blocking
+  const [loading, setLoading] = useState<boolean>(() => {
+    const token = typeof window !== "undefined" ? sessionStorage.getItem("vouch_token") : null;
+    const cachedUser = typeof window !== "undefined" ? sessionStorage.getItem("vouch_user") : null;
+    return Boolean(token && !cachedUser);
+  });
 
   useEffect(() => {
     const token = sessionStorage.getItem("vouch_token");
@@ -56,13 +77,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Revalidate session in background (or foreground if uncached)
     apiFetch<MeResponse>("/api/auth/me")
       .then((data) => {
         setUser(data.user);
         setOrganization(data.organization);
+        sessionStorage.setItem("vouch_user", JSON.stringify(data.user));
+        sessionStorage.setItem("vouch_org", JSON.stringify(data.organization));
       })
       .catch(() => {
         sessionStorage.removeItem("vouch_token");
+        sessionStorage.removeItem("vouch_user");
+        sessionStorage.removeItem("vouch_org");
         setUser(null);
         setOrganization(null);
       })
@@ -77,6 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ role }),
     });
     sessionStorage.setItem("vouch_token", data.token);
+    sessionStorage.setItem("vouch_user", JSON.stringify(data.user));
+    sessionStorage.setItem("vouch_org", JSON.stringify(data.organization));
     setUser(data.user);
     setOrganization(data.organization);
     return data.user;
@@ -89,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       sessionStorage.setItem("vouch_token", data.token);
+      sessionStorage.setItem("vouch_user", JSON.stringify(data.user));
+      sessionStorage.setItem("vouch_org", JSON.stringify(data.organization));
       setUser(data.user);
       setOrganization(data.organization);
       return data.user;
@@ -98,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     sessionStorage.removeItem("vouch_token");
+    sessionStorage.removeItem("vouch_user");
+    sessionStorage.removeItem("vouch_org");
     setUser(null);
     setOrganization(null);
   }, []);
@@ -118,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth(): AuthContextType {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
