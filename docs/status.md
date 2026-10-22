@@ -166,6 +166,23 @@ Finding resolutions and Revisions API (S9a) completed and live:
   - Called `apply_fixes`: created revision n=2, applied `["b8558971-0277-46cc-ae77-50f9e6465572"]`, skipped `[]`.
 - Vitest suite: 58/58 tests passing across 9 test files in Vitest.
 
+Suggested replacements and Guidance separation (S9a.1) completed and live:
+- Prompt and Schema (`server/src/ledger/pipeline.ts` & `docs/claim-ledger-spec.md`):
+  - Model output schema replaced `suggested_fix` with `replacement` (exact text to replace quoted span in same grammatical form using only given facts; null if no honest fix) and `guidance` (advice for creator; never inserted into text).
+  - Stored `replacement` in `findings.suggested_fix` and appended `guidance` to `findings.reason`.
+- Code validation:
+  - `validateReplacement`: nulls replacement if longer than `max(3 * quote.length, quote.length + 60)` or if it starts with an instruction verb (`adjust`, `provide`, `remove`, `replace`, `consider`, `use`, `add`, `cite`, `ensure`, `avoid`, `change`).
+  - `dedupePunctuation`: on `apply_fixes`, if replacement ends with punctuation (`.`, `!`, `?`) and the character immediately following the span in text is also punctuation, drops the trailing punctuation to prevent `..`, `!!`, or `.!`.
+- Benchmark (5 runs with 10s pauses):
+  - 5/5 runs completed with AI answers (100% per-row accuracy across all 5 claims).
+  - All claims with replacements printed full substituted sentences cleanly with zero advice text.
+- Live production verification on https://vouch-ten-iota.vercel.app:
+  - Created new content "API test (S9a.1)" (ID: `9b719156-f0ff-416e-9ca4-bd25ad6e5e1f`).
+  - Reviewed, accepted all replacements ("Rated 4.8 by our customers" -> "Rated 4.8 out of 5 by customers (as of June 2026)." and "Keeps drinks cold for 48 hours" -> "Keeps drinks cold for 24 hours.").
+  - `apply_fixes` produced clean new body with proper punctuation deduplication:
+    "India's No.1 eco-friendly water bottle, now 40% lighter. Rated 4.8 out of 5 by customers (as of June 2026)! Keeps drinks cold for 24 hours. #stayhydrated"
+- Vitest suite: 62/62 tests passing across 10 test files in Vitest.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -193,7 +210,7 @@ Verified row counts:
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
-| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a (server resolutions & revisions API done and live) |
+| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a & S9a.1 (server resolutions, revisions API, literal replacements & dedupe done and live) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
