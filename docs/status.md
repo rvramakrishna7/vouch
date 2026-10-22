@@ -142,59 +142,23 @@ Claim Ledger pipeline and UI (S8a, S8a.1, S8a.2, S8b) completed and live:
     - "Keeps drinks cold for 48 hours.": `contradicted` (cites `F-15` + `CLAIM-03`, suggested fix: "Keeps drinks cold for 24 hours.")
 - Unit test suite: 49/49 tests passing across 8 test files in Vitest.
 
-Finding resolutions and Revisions API (S9a) completed and live:
+Finding resolutions, Preview, and Revisions UI (S9a, S9a.1, S9a.2, S9b) completed:
 - Database: Migration `005_finding_replacement_text.sql` applied to Supabase PostgreSQL, adding `replacement_text TEXT` to `findings`.
-- Resolution endpoint (`PATCH /api/findings/:id/resolution` in `server/src/routes/findings.ts`):
-  - Creator owner only: returns 403 for non-creator roles, 404 for unknown finding, other org, or other creator's content.
-  - Action `accept`: requires `suggested_fix` (returns 400 `no_suggested_fix` otherwise).
-  - Action `edit`: requires `text` (1-500 chars), stored in `replacement_text`.
-  - Action `dismiss`: requires `reason` (min 5 chars), stored in `dismiss_reason` (returns 400 otherwise).
-  - Invariant guard: supported claims cannot be resolved (returns 400 `nothing_to_fix`).
-  - Stale guard: only findings of the content's latest review on the latest revision can be resolved (returns 409 `stale_review`).
-  - Audit logging: records append-only audit event (`finding.resolve`).
-- Revisions endpoint (`POST /api/contents/:id/revisions` in `server/src/routes/contents.ts`):
-  - Creator owner only: returns 403 for non-creator, 404 for cross-tenant/other creator.
-  - Mode `apply_fixes`: fetches accepted and edited findings of the latest review, replaces spans from END of text backwards so character offsets remain valid, detects and skips overlapping spans, creates revision n+1 (returns 400 `nothing_to_apply` if no candidate findings). Returns `{ revision, applied, skipped }`.
-  - Mode `manual`: creates revision n+1 with provided body (1-20000 chars).
-  - Updates `contents.updated_at = now()`.
-  - Audit logging: records append-only audit event (`revision.create`).
-- Live production verification on https://vouch-ten-iota.vercel.app:
-  - Created new content "API test (S9a)" (ID: `4f2932fd-7617-43e4-a26a-d885e944bc81`) with sample caption.
-  - Ran review on revision n=1 (Groq primary, latency 2309ms).
-  - Accepted fix on "48 hours" claim (ID: `b8558971-0277-46cc-ae77-50f9e6465572`).
-  - Dismissed `#stayhydrated` (ID: `d8c841a4-43bc-426d-a3e0-cfd64bad337c`) with reason: "Brand social team confirmed #stayhydrated is our approved evergreen campaign hashtag.".
-  - Called `apply_fixes`: created revision n=2, applied `["b8558971-0277-46cc-ae77-50f9e6465572"]`, skipped `[]`.
-- Vitest suite: 58/58 tests passing across 9 test files in Vitest.
-
-Suggested replacements and Guidance separation (S9a.1) completed and live:
-- Prompt and Schema (`server/src/ledger/pipeline.ts` & `docs/claim-ledger-spec.md`):
-  - Model output schema replaced `suggested_fix` with `replacement` (exact text to replace quoted span in same grammatical form using only given facts; null if no honest fix) and `guidance` (advice for creator; never inserted into text).
-  - Stored `replacement` in `findings.suggested_fix` and appended `guidance` to `findings.reason`.
-- Code validation:
-  - `validateReplacement`: nulls replacement if longer than `max(3 * quote.length, quote.length + 60)` or if it starts with an instruction verb (`adjust`, `provide`, `remove`, `replace`, `consider`, `use`, `add`, `cite`, `ensure`, `avoid`, `change`).
-  - `dedupePunctuation`: on `apply_fixes`, if replacement ends with punctuation (`.`, `!`, `?`) and the character immediately following the span in text is also punctuation, drops the trailing punctuation to prevent `..`, `!!`, or `.!`.
-- Benchmark (5 runs with 10s pauses):
-  - 5/5 runs completed with AI answers (100% per-row accuracy across all 5 claims).
-  - All claims with replacements printed full substituted sentences cleanly with zero advice text.
-- Live production verification on https://vouch-ten-iota.vercel.app:
-  - Created new content "API test (S9a.1)" (ID: `9b719156-f0ff-416e-9ca4-bd25ad6e5e1f`).
-  - Reviewed, accepted all replacements ("Rated 4.8 by our customers" -> "Rated 4.8 out of 5 by customers (as of June 2026)." and "Keeps drinks cold for 48 hours" -> "Keeps drinks cold for 24 hours.").
-  - `apply_fixes` produced clean new body with proper punctuation deduplication:
-    "India's No.1 eco-friendly water bottle, now 40% lighter. Rated 4.8 out of 5 by customers (as of June 2026)! Keeps drinks cold for 24 hours. #stayhydrated"
-- Vitest suite: 62/62 tests passing across 10 test files in Vitest.
-
-Fact-checking replacements (S9a.2) completed:
-- Code and Spec (`server/src/ledger/pipeline.ts` & `docs/claim-ledger-spec.md`):
-  - Added `factCheckReplacement` enforcing 4 deterministic guards on candidate replacements:
-    a) Verdict is outdated -> replacement nulled with note ("Expired facts cannot be reused in a suggested fix.");
-    b) `runRuleChecks` finds a banned term -> replacement nulled with note;
-    c) Replacement contains a regulated term but no number in an in-date candidate fact -> replacement nulled with note;
-    d) Replacement contains any number that does not appear in an in-date candidate fact -> replacement nulled with note.
-  - Note appended to creator guidance; genuine fact-checked replacements (such as "Keeps drinks cold for 24 hours." backed by F-15) preserved.
-- Benchmark (5 runs with 10s pauses):
-  - 5/5 runs completed (100% accuracy across all 5 claims).
-  - Outdated claims and vague regulated claims produce zero invalid replacements; verified replacements cleanly substituted into caption sentences.
-- Vitest suite: 67/67 tests passing across 10 test files in Vitest.
+- Server enhancements (`server/src/routes/contents.ts` & `server/src/ledger/pipeline.ts`):
+  - Added `{ mode: "preview" }` to `POST /api/contents/:id/revisions`: returns `{ body, applied, skipped }` without saving a revision row.
+  - Added sentence-start capitalization: if a replacement starts at offset 0 or after `". "`, `"! "`, or `"? "`, capitalises its first letter before applying.
+  - Unit tests in `server/test/resolutions.test.ts` covering preview mode and sentence capitalization.
+- Client UI (`client/src/pages/ContentDetailPage.tsx`):
+  - Creator owner actions on latest review of latest revision: "Accept fix" (when suggested_fix exists), "Edit" (inline input prefilled, Save/Cancel), "Dismiss" (inline reason box, min 5 chars, disabled until valid, Confirm/Cancel).
+  - Badges: Accepted (green), Edited: `"<text>"` (blue), Dismissed: `"<reason>"` (grey). Creator can click "Change" to re-resolve. Reviewer and Brand Manager see badges read-only with zero action buttons.
+  - "Apply fixes" bar: shows `"n fixes ready"` with "Preview changes" button.
+  - Preview modal: word-level diff using `diff` (`diffWords`) with red strikethrough for removals and green for additions, skipped fixes section with reason ("overlaps another fix"), "Create revision N+1" and "Cancel" buttons.
+  - Manual edit modal: "Edit text manually" button next to "Preview changes", text editor with current body, live word-level diff as creator types, and "Save as revision N+1" button.
+  - Revision history: interactive list of all revisions, clicking an older revision displays its text and a word-level diff against the revision before it (or "Initial revision" for rev 1).
+  - Post-creation banner: `"Revision N created. Run Vouch review again to check the new text."` with "Run review" button.
+  - Stale review 409 handling: displays alert `"This review is for an older revision. Run a new review first."` and disables resolution buttons until a new review finishes.
+- Vitest suite: 69/69 tests passing across 10 test files in Vitest.
+- Client build: `tsc -b && vite build` passing with 0 errors.
 
 Verified row counts:
 - schema_migrations: 4
@@ -223,14 +187,14 @@ Verified row counts:
 | S6 | Rule-based engine (terms, expired facts, readability) & latency | 23 Oct | Done: S6a (rule engine & review API), S6b (findings UI), S6c (latency down to <150ms warm, Server-Timing headers) |
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
-| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | In progress: S9a, S9a.1 & S9a.2 (server resolutions, revisions API, literal replacements & fact-checking done and live) |
-| S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Pending |
+| S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history) |
+| S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Next |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S9b: Findings UI (accept/edit/dismiss buttons, revision selector, and visual diff view).
+S10: Reviewer approval workflow, override, and audit log screen.
 
 ## Open issues
 none
