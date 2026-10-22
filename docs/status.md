@@ -13,8 +13,8 @@ Monorepo scaffolded and pushed to `main`. `client/` (Vite + React + TS + Tailwin
 | Step | Name | Target | Status |
 |---|---|---|---|
 | S0 | Environment check (read-only) | 22 Oct, before 10:00 | Done: Node 24.13.1, npm 11.8.0, git 2.52.0, Windows 11, PowerShell 5.1 |
-| S1 | Scaffold monorepo, git, push; owner connects two Vercel projects; health check live | 22 Oct | Code done, awaiting hosting |
-| S2 | DB schema + migrations + fictional demo brand seed | 22 Oct | Pending |
+| S1 | Scaffold monorepo, git, push; owner connects two Vercel projects; health check live | 22 Oct | Code done, awaiting hosting. S1.1 hotfix merged: server TypeScript pinned to 5.9.3 (DEC-015 Proposed), server/vercel.json region bom1; owner to redeploy server |
+| S2 | DB schema + migrations + fictional demo brand seed | 22 Oct | Blocked: DATABASE_URL in server/.env does not resolve (ENOTFOUND); owner to set the Supabase pooler URL |
 | S3 | Auth, roles, one-click demo logins | 22 Oct | Pending |
 | S4 | Brand Kit screens (rules, facts, terms) | 22 Oct | Pending |
 | S5 | Content submission (paste text, DOCX) with purpose/audience/channel | 23 Oct | Pending |
@@ -28,7 +28,8 @@ Monorepo scaffolded and pushed to `main`. `client/` (Vite + React + TS + Tailwin
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-Owner connects hosting for `client/` and `server/` (set VITE_API_URL, CLIENT_ORIGIN) and confirms the live /api/health; then S2.
+Owner redeploys the server Vercel project and confirms the build passes and /api/health is live (region bom1). Owner puts the Supabase Transaction pooler URL into server/.env, then re-sends S2.
 
 ## Open issues
-none
+- S2 blocked on DATABASE_URL (host does not resolve).
+- DEC-015 (TypeScript 5.9 pin) awaiting owner decision.
