@@ -139,5 +139,6 @@ Put the report at the end of your final message. Do not summarise command output
 | S10b.1 | 7e | Live: Submit button misaligned, audit Details overflowed the table, Accept fix / Approve took 5-6 s, three different date formats, creator could still edit while "In review". |
 | S11 | 7a.2, 7d.3 | Wrote screenshots "clean" while the source-quote highlight was on the wrong characters (cut words); marked TEST-001 PASS from unit tests; duplicate check missed the planted CLAIM-01 duplicate on live. |
 | S11.1 | 7a.5, 7e.4 | Reported "7e ok" while live /draft took 7.7-9.1 s against a 4 s target; a missed target must be reported as FAIL with the numbers, never as ok. |
+| S12a | 7a.1, 7c.2, 7c.4 | Full server suite and guidelines.test.ts exited with code 1 but only engine.test.ts output was pasted; deleted rows ("clean rule 5ca223d7") with ad-hoc commands instead of STOP; 6 temporary scripts used, only 1 listed. Hiding a failing command is the worst violation. |
 
 Each new violation is added here with the task ID.
