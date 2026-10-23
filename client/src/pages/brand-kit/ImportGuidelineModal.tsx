@@ -45,6 +45,7 @@ export function ImportGuidelineModal({
   const [guidelineText, setGuidelineText] = useState("");
   const [serverSourceText, setServerSourceText] = useState("");
   const [isDrafting, setIsDrafting] = useState(false);
+  const [draftingStep, setDraftingStep] = useState<string>("Reading guideline…");
   const [draftError, setDraftError] = useState<string | null>(null);
 
   // Review step state
@@ -57,6 +58,28 @@ export function ImportGuidelineModal({
   const [rulesMap, setRulesMap] = useState<Map<string, string>>(new Map());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Timer for step text advancing: "Reading guideline…" -> "Drafting rules…" -> "Checking duplicates…"
+  useEffect(() => {
+    if (!isDrafting) {
+      setDraftingStep("Reading guideline…");
+      return;
+    }
+
+    setDraftingStep("Reading guideline…");
+    const t1 = setTimeout(() => {
+      setDraftingStep("Drafting rules…");
+    }, 1200);
+
+    const t2 = setTimeout(() => {
+      setDraftingStep("Checking duplicates…");
+    }, 2800);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [isDrafting]);
 
   // Load existing rules map on open so we can show rule text in the duplicate tooltip
   useEffect(() => {
@@ -237,6 +260,16 @@ export function ImportGuidelineModal({
     }
   };
 
+  // Helper to clean markdown markers from before and after text while keeping mark text intact
+  const cleanMarkdownForDisplay = (str: string): string => {
+    return str
+      .replace(/\*\*/g, "")
+      .replace(/__/g, "")
+      .replace(/^#+\s+/gm, "")
+      .replace(/^-\s+/gm, "")
+      .replace(/^\s*-\s+/g, "");
+  };
+
   // Helper to extract context excerpt around source quote rendered STRICTLY from source_text
   const renderExcerpt = (sourceQuote: string, start?: number, end?: number) => {
     const textToSearch = serverSourceText || guidelineText;
@@ -295,18 +328,21 @@ export function ImportGuidelineModal({
       }
     }
 
-    const before = textToSearch.slice(beforeIndex, qStart);
+    const rawBefore = textToSearch.slice(beforeIndex, qStart);
     const highlighted = textToSearch.slice(qStart, qEnd);
-    const after = textToSearch.slice(qEnd, afterIndex);
+    const rawAfter = textToSearch.slice(qEnd, afterIndex);
+
+    const cleanBefore = cleanMarkdownForDisplay(rawBefore);
+    const cleanAfter = cleanMarkdownForDisplay(rawAfter);
 
     return (
       <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-relaxed font-mono">
         <span className="text-slate-400 font-sans">{beforeIndex > 0 ? "… " : ""}</span>
-        <span>{before}</span>
+        <span>{cleanBefore}</span>
         <mark className="bg-amber-100 text-amber-900 font-semibold px-1 py-0.5 rounded border border-amber-300 mx-0.5">
           {highlighted}
         </mark>
-        <span>{after}</span>
+        <span>{cleanAfter}</span>
         <span className="text-slate-400 font-sans">{afterIndex < textToSearch.length ? " …" : ""}</span>
       </div>
     );
@@ -398,7 +434,7 @@ export function ImportGuidelineModal({
                   {isDrafting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Drafting rules…</span>
+                      <span>{draftingStep}</span>
                     </>
                   ) : (
                     <span>Draft rules</span>

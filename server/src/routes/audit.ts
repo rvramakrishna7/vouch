@@ -12,6 +12,22 @@ const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   before: z.string().optional(),
   action: z.string().optional(),
+  exclude: z.string().optional(),
+});
+
+// GET /api/audit/actions (distinct actions for this organization)
+auditRouter.get("/actions", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  try {
+    const { rows } = await pool.query<{ action: string }>(
+      "SELECT DISTINCT action FROM audit_events WHERE organization_id = $1 ORDER BY action ASC",
+      [orgId],
+    );
+    return res.json({ actions: rows.map((r) => r.action) });
+  } catch (err) {
+    console.error("GET /api/audit/actions error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // GET /api/audit (brand_manager and reviewer only; creator 403)
@@ -23,11 +39,15 @@ auditRouter.get("/", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "invalid_input", details: parseResult.error.format() });
   }
 
-  const { limit, before, action } = parseResult.data;
+  const { limit, before, action, exclude } = parseResult.data;
 
   try {
     const conditions: string[] = ["ae.organization_id = $1"];
     const params: unknown[] = [orgId];
+
+    if (exclude === "auth") {
+      conditions.push("ae.action NOT LIKE 'auth.%'");
+    }
 
     if (before) {
       const parts = before.split("|");

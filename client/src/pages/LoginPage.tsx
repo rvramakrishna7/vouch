@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type Role } from "../auth/AuthContext.js";
 import { getRoleHome } from "../components/ProtectedLayout.js";
@@ -6,6 +6,12 @@ import { getRoleHome } from "../components/ProtectedLayout.js";
 export function LoginPage() {
   const { loginDemo, login, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Cold start pre-warm: ping GET /api/health once on mount (fire and forget, no UI)
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || "";
+    fetch(`${apiUrl}/api/health`).catch(() => {});
+  }, []);
 
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [email, setEmail] = useState("");
