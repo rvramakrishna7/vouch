@@ -269,6 +269,23 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - Viewport width layout assertions (`scrollWidth <= clientWidth`) checked at 1280px and 1440px.
     - All 10 step screenshots visually inspected.
 
+- Guideline import experience (S11) completed, verified, and live:
+  - Fictional Aqualeaf Brand Guideline document created (`docs/demo-guideline.md`, 331 words) covering claims, tone, terminology, and accessibility directives, including duplicate directives.
+  - Server API (`/api/guidelines`):
+    - `POST /api/guidelines/draft`: brand_manager only (403 for others). Accepts JSON `{text}` (50..20,000 chars) or multipart DOCX file. AI extracts candidate rules with `temperature: 0` and prompt-injection guard. Code validates that every source quote appears verbatim in the guideline text (drops hallucinated quotes into `rejected`). Code assigns the next free rule code per category (e.g. `CLAIM-05`). On-the-fly embedding duplicate check flags candidate rules matching existing rules (cosine similarity >= 0.85). Nothing is saved to DB.
+    - `POST /api/guidelines/apply`: brand_manager only. Re-checks that rule codes are still free in a transaction (409 `code_taken`), batch-inserts approved rules, and records append-only audit event (`rules.import`).
+  - Client UI (`/brand-kit` Rules tab):
+    - "Import from guideline" button visible to Brand Manager.
+    - Modal with guideline textarea, live character counter, "Use sample guideline" button, DOCX file upload, and "Draft rules" button with spinner.
+    - Review & Approval view: card per draft with checkbox (checked by default, unchecked if duplicate), category select, severity select, editable rule statement, source quote verified in text with highlighted context excerpt, and amber "Possible duplicate of CLAIM-01" badge.
+    - Footer with selection counter and "Add N rules" button. Refreshing rules list displays newly added rules with success banner. Plain-language error messages on AI failure.
+  - Test suites:
+    - Server: 10 unit tests passing in `server/test/guidelines.test.ts` (12 test files, 95 tests total across server).
+    - Playwright E2E: 5/5 tests passing headless across `approval.spec.ts`, `guideline.spec.ts`, and `resolve.spec.ts`. All step screenshots visually inspected.
+  - Live AI benchmarking:
+    - 3 live runs of `POST /api/guidelines/draft` against `https://vouch-ten-iota.vercel.app` on `docs/demo-guideline.md`.
+    - 10/10 rules extracted consistently, 0 rejected quotes, AI latency ~2.0s-2.4s. Duplicates detected accurately via embeddings. Zero writes performed on live DB.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -298,12 +315,12 @@ Verified row counts:
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history), S9b.1 (fix resolve UI "open" status & 8/8 Playwright e2e checks), S9c (UI polish, HTML entity cleanup, stale-review highlights fix) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Done: S10a (submit, approval, lock rules, activity & audit API) and S10b (approval UI, override dialog, activity timeline, /audit page, E2E tests) |
-| S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Next |
-| S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
+| S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Done: S11 (server pipeline & apply API, Brand Kit import modal, live 3-run benchmark, 5/5 E2E tests) |
+| S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Next |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S11: Guideline import: AI-drafted rules → manager approves (PDF / text upload, AI extracts candidate rules with rationale, Brand Manager reviews/accepts/edits).
+S12: End-to-end pass of TEST-001..011 on live link; fixes.
 
 ## Open issues
 none
