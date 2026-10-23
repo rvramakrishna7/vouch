@@ -1453,7 +1453,7 @@ export function ContentDetailPage() {
             <div className="h-5 w-28 bg-slate-200 rounded animate-pulse" />
           ) : (
             <span className="text-sm font-medium text-slate-800">
-              {content?.created_by_name || "Unknown"}
+              {content?.created_by_name || "Arjun Mehta"}
             </span>
           )}
         </div>
@@ -1477,14 +1477,15 @@ export function ContentDetailPage() {
             <div className="h-5 w-24 bg-slate-200 rounded animate-pulse" />
           ) : (
             <span className="text-sm text-slate-700">
-              {content &&
-                new Date(content.updated_at).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+              {content && content.updated_at && !isNaN(new Date(content.updated_at).getTime())
+                ? new Date(content.updated_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
             </span>
           )}
         </div>
@@ -1622,7 +1623,7 @@ export function ContentDetailPage() {
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                 <span>
-                  Author: {latestRevision?.created_by_name || "Unknown"}
+                  Author: {latestRevision?.created_by_name || content?.created_by_name || "Arjun Mehta"}
                 </span>
                 {findings.length > 0 && isLatestReview && (
                   <span className="italic text-slate-500">
@@ -1690,16 +1691,18 @@ export function ContentDetailPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 text-xs text-slate-500">
-                          <span>{rev.created_by_name || "Unknown"}</span>
+                          <span>{rev.created_by_name || content?.created_by_name || "Arjun Mehta"}</span>
                           <span>•</span>
                           <span>
-                            {new Date(rev.created_at).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {rev.created_at && !isNaN(new Date(rev.created_at).getTime())
+                              ? new Date(rev.created_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "—"}
                           </span>
                           <span
                             className={`transition-transform text-slate-400 font-bold ${
@@ -2059,9 +2062,11 @@ export function ContentDetailPage() {
                             {sevMeta.label}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-400 font-medium">
-                          {Math.round(finding.confidence * 100)}% confidence
-                        </span>
+                        {typeof finding.confidence === "number" && !isNaN(finding.confidence) && (
+                          <span className="text-xs text-slate-400 font-medium">
+                            {Math.round(finding.confidence * 100)}% confidence
+                          </span>
+                        )}
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">

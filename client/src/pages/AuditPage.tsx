@@ -94,23 +94,93 @@ export function AuditPage() {
     }
   };
 
-  const formatPayload = (payload: Record<string, any>) => {
-    if (!payload || Object.keys(payload).length === 0) return "—";
-    const parts: string[] = [];
-    if (payload.title) parts.push(`Title: "${payload.title}"`);
-    if (payload.decision) parts.push(`Decision: ${payload.decision}`);
-    if (payload.override_reason) parts.push(`Override: "${payload.override_reason}"`);
-    if (payload.comment) parts.push(`Comment: "${payload.comment}"`);
-    if (payload.action) parts.push(`Action: ${payload.action}`);
-    if (payload.replacement_text) parts.push(`Text: "${payload.replacement_text}"`);
-    if (payload.dismiss_reason) parts.push(`Reason: "${payload.dismiss_reason}"`);
-    if (payload.n !== undefined) parts.push(`Rev: #${payload.n}`);
-    if (payload.findings_count !== undefined) parts.push(`${payload.findings_count} findings`);
-    if (payload.ai_status) parts.push(`AI: ${payload.ai_status}`);
-    if (payload.role) parts.push(`Role: ${payload.role}`);
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  };
 
-    if (parts.length > 0) return parts.join(" · ");
-    return JSON.stringify(payload);
+  const formatPayload = (action: string, payload: Record<string, any>) => {
+    if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) return "—";
+
+    switch (action) {
+      case "auth.demo_login":
+        return payload.role ? `Role: ${payload.role}` : "Demo login";
+      case "contents.create":
+      case "content.create": {
+        const parts: string[] = [];
+        if (payload.title) parts.push(`Title: "${payload.title}"`);
+        if (payload.channel) parts.push(`Channel: ${payload.channel}`);
+        return parts.length ? parts.join(" · ") : "Created content";
+      }
+      case "revision.create": {
+        const n = payload.n !== undefined ? `#${payload.n}` : "";
+        const mode = payload.mode ? ` (mode: ${payload.mode})` : "";
+        return `Revision ${n}${mode}`.trim();
+      }
+      case "review.run": {
+        const parts: string[] = [];
+        if (payload.findings_count !== undefined) parts.push(`${payload.findings_count} finding(s)`);
+        if (payload.ai_status) parts.push(`AI: ${payload.ai_status}`);
+        return parts.length ? parts.join(" · ") : "Ran review";
+      }
+      case "content.submit":
+        return payload.revision_id ? "Submitted revision" : "Submitted for review";
+      case "content.request_changes":
+        return payload.comment ? `Comment: "${payload.comment}"` : "Requested changes";
+      case "content.approve":
+        return payload.override_reason ? `Override: "${payload.override_reason}"` : "Approved without override";
+      case "finding.resolve": {
+        const parts: string[] = [];
+        if (payload.action) parts.push(`Action: ${payload.action}`);
+        if (payload.replacement_text) parts.push(`Text: "${payload.replacement_text}"`);
+        if (payload.dismiss_reason) parts.push(`Reason: "${payload.dismiss_reason}"`);
+        return parts.length ? parts.join(" · ") : "Resolved finding";
+      }
+      case "rules.create": {
+        const parts: string[] = [];
+        if (payload.code) parts.push(`Rule: ${payload.code}`);
+        if (payload.category) parts.push(`Category: ${payload.category}`);
+        return parts.length ? parts.join(" · ") : "Created rule";
+      }
+      case "rules.update": {
+        const parts: string[] = [];
+        if (payload.version) parts.push(`v${payload.version}`);
+        if (payload.changes && typeof payload.changes === "object") {
+          const keys = Object.keys(payload.changes).join(", ");
+          parts.push(`Changed: ${keys}`);
+        }
+        return parts.length ? parts.join(" · ") : "Updated rule";
+      }
+      case "facts.create":
+        return payload.code ? `Fact: ${payload.code}` : "Created fact";
+      case "terms.create": {
+        const parts: string[] = [];
+        if (payload.term) parts.push(`Term: "${payload.term}"`);
+        if (payload.type) parts.push(`Type: ${payload.type}`);
+        return parts.length ? parts.join(" · ") : "Created term";
+      }
+      case "terms.update": {
+        if (payload.changes && typeof payload.changes === "object") {
+          const changed = Object.entries(payload.changes)
+            .map(([k, v]) => `${k}: "${v}"`)
+            .join(", ");
+          return `Updated: ${changed}`;
+        }
+        return "Updated term";
+      }
+      case "terms.delete":
+        return payload.term ? `Deleted: "${payload.term}"` : "Deleted term";
+      case "seed:init":
+        return payload.brand ? `Seed: ${payload.brand}` : "System seed";
+      default: {
+        // Short generic fallback ("key: value, ...") - never raw JSON
+        const entries = Object.entries(payload)
+          .filter(([_, v]) => v !== undefined && v !== null && typeof v !== "object")
+          .map(([k, v]) => `${k}: ${v}`);
+        return entries.length ? entries.slice(0, 3).join(", ") : "—";
+      }
+    }
   };
 
   return (
@@ -180,10 +250,10 @@ export function AuditPage() {
                 events.map((ev) => (
                   <tr key={ev.id} className="hover:bg-slate-50/60 transition">
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
-                      {new Date(ev.at).toLocaleString()}
+                      {formatDate(ev.at)}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
-                      {ev.actor_name || ev.actor}
+                      {ev.actor_name && ev.actor_name !== "Unknown" ? ev.actor_name : (ev.actor || "—")}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-800 border border-slate-200">
@@ -193,8 +263,8 @@ export function AuditPage() {
                     <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
                       {ev.entity}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 max-w-md truncate" title={formatPayload(ev.payload)}>
-                      {formatPayload(ev.payload)}
+                    <td className="px-4 py-3 text-slate-600 max-w-md truncate" title={formatPayload(ev.action, ev.payload)}>
+                      {formatPayload(ev.action, ev.payload)}
                     </td>
                   </tr>
                 ))

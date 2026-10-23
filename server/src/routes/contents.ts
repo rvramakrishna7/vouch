@@ -1184,7 +1184,7 @@ contentsRouter.get("/:id/activity", async (req: Request, res: Response) => {
          ae.payload,
          ae.at
        FROM audit_events ae
-       LEFT JOIN users u ON u.id::text = ae.actor
+       LEFT JOIN users u ON (u.id::text = ae.actor OR lower(u.email) = lower(ae.actor))
        WHERE ae.organization_id = $2
          AND (ae.entity = 'content:' || $1 OR ae.payload->>'content_id' = $1)
        ORDER BY ae.at ASC, ae.id ASC`,
