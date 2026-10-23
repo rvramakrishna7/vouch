@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
+import { ImportGuidelineModal } from "./ImportGuidelineModal.js";
 
 export interface Rule {
   id: string;
@@ -18,6 +19,8 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Add rule state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -162,13 +165,22 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
           Numbered brand rules that govern claims, tone of voice, terminology usage, and accessibility standards.
         </p>
         {isBrandManager && (
-          <button
-            type="button"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-1.5 rounded-lg transition-colors"
-          >
-            {showAddForm ? "Cancel" : "+ Add rule"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
+            >
+              Import from guideline
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
+            >
+              {showAddForm ? "Cancel" : "+ Add rule"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -380,6 +392,14 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
           </div>
         )}
       </div>
+      <ImportGuidelineModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onApplied={(count) => {
+          setSuccess(`Successfully imported ${count} rule(s) into Brand Kit.`);
+          void fetchRules();
+        }}
+      />
     </div>
   );
 }
