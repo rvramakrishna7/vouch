@@ -345,6 +345,18 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
         }
       }
 
+      if (url.includes("/api/audit/actions")) {
+        return jsonFulfill({
+          actions: [
+            "content.submit",
+            "content.request_changes",
+            "contents.create",
+            "rules.import",
+            "auth.demo_login",
+          ],
+        });
+      }
+
       const matchAudit = url.match(/\/api\/audit(\?.*)?$/);
       if (matchAudit) {
         const parsedUrl = new URL(url);
