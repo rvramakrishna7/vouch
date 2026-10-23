@@ -24,6 +24,7 @@ export const aiRuleDraftItemSchema = z.object({
   severity: z.enum(ALLOWED_SEVERITIES),
   text: z.string().min(1),
   source_quote: z.string().min(1),
+  duplicate_of: z.string().nullable().optional(),
 });
 
 export const aiGuidelineDraftResponseSchema = z.object({
@@ -34,7 +35,9 @@ export interface ExistingRule {
   id?: string;
   code: string;
   category: string;
+  severity?: string;
   text: string;
+  version?: number;
 }
 
 export interface GuidelineDraft {
@@ -52,6 +55,7 @@ export interface GuidelineDraft {
 export interface GuidelineDraftResult {
   drafts: GuidelineDraft[];
   rejected: number;
+  source_text: string;
   ai: {
     provider: string;
     model: string;
@@ -77,75 +81,77 @@ export function setEmbedderHook(fn: ((texts: string[]) => Promise<number[][]>) |
   customEmbedder = fn;
 }
 
+// In-memory embedding cache keyed by rule_id or code+version
+interface CachedEmbedding {
+  vector: number[];
+  version: number;
+  text: string;
+}
+const ruleEmbeddingCache = new Map<string, CachedEmbedding>();
+
+export function clearRuleEmbeddingCache() {
+  ruleEmbeddingCache.clear();
+}
+
 /**
- * Normalizes text for lenient matching (whitespace collapse, quote normalization).
+ * Normalizes text: standardizes newlines, removes BOM, normalizes smart quotes.
  */
-export function normalizeText(s: string): string {
+export function normalizeSourceText(s: string): string {
   return s
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/^\uFEFF/, "")
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\s+/g, " ")
     .trim();
 }
 
 /**
- * Locates the source_quote within the guidelineText.
- * Returns { start, end } or null if not found.
+ * Locates the source_quote within the normalized sourceText.
+ * Returns exact character offsets { start, end } such that
+ * sourceText.slice(start, end) matches the quote (or cleanly matching span), or null if not found.
  */
 export function findQuoteOffsets(
-  guidelineText: string,
+  sourceText: string,
   rawQuote: string,
 ): { start: number; end: number } | null {
-  const quote = rawQuote.trim();
+  const quote = rawQuote
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .trim();
+
   if (!quote) return null;
 
   // 1. Exact match attempt
-  const exactIdx = guidelineText.indexOf(quote);
+  const exactIdx = sourceText.indexOf(quote);
   if (exactIdx !== -1) {
     return { start: exactIdx, end: exactIdx + quote.length };
   }
 
   // 2. Case-insensitive exact match attempt
-  const lowerText = guidelineText.toLowerCase();
+  const lowerText = sourceText.toLowerCase();
   const lowerQuote = quote.toLowerCase();
   const lowerIdx = lowerText.indexOf(lowerQuote);
   if (lowerIdx !== -1) {
     return { start: lowerIdx, end: lowerIdx + quote.length };
   }
 
-  // 3. Normalized whitespace & quote match
-  const normGuideline = normalizeText(guidelineText).toLowerCase();
-  const normQuote = normalizeText(quote).toLowerCase();
-  const normIdx = normGuideline.indexOf(normQuote);
-  if (normIdx === -1) {
-    return null;
-  }
-
-  // Map back to original text by searching first and last token
+  // 3. Match across whitespace variation (e.g. single space vs newlines in source)
+  // Split quote into tokens and find exact match sequence in sourceText
   const words = quote.split(/\s+/).filter(Boolean);
   if (words.length === 0) return null;
-  const firstWord = words[0].toLowerCase();
-  const lastWord = words[words.length - 1].toLowerCase();
 
-  let searchStart = 0;
-  while (searchStart < guidelineText.length) {
-    const fIdx = lowerText.indexOf(firstWord, searchStart);
-    if (fIdx === -1) break;
-    const lIdx = lowerText.indexOf(lastWord, fIdx);
-    if (lIdx !== -1 && lIdx - fIdx < quote.length * 2) {
-      const candidateSpan = guidelineText.slice(fIdx, lIdx + lastWord.length);
-      if (normalizeText(candidateSpan).toLowerCase() === normQuote) {
-        return { start: fIdx, end: lIdx + lastWord.length };
-      }
-    }
-    searchStart = fIdx + 1;
+  // Build regex matching the words separated by \s+
+  const escapedWords = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(escapedWords.join("\\s+"), "i");
+  const match = pattern.exec(sourceText);
+  if (match && match.index !== undefined) {
+    return { start: match.index, end: match.index + match[0].length };
   }
 
-  // Fallback: estimate from ratio if normalized match was found
-  const ratio = guidelineText.length / Math.max(1, normGuideline.length);
-  const approxStart = Math.min(guidelineText.length - 1, Math.round(normIdx * ratio));
-  const approxEnd = Math.min(guidelineText.length, approxStart + quote.length);
-  return { start: approxStart, end: approxEnd };
+  return null;
 }
 
 /**
@@ -180,15 +186,19 @@ CRITICAL INVARIANTS:
    - "high": serious regulatory risk, false advertising, trademark violation, or legal exposure.
    - "medium": notable brand voice inconsistency, terminology deviation, or significant accessibility obstacle.
    - "low": minor stylistic preference, polish suggestion, or formatting guideline.
-5. Return JSON ONLY matching the requested schema.`;
+5. DUPLICATE DETECTION:
+   You will receive the organization's existing active rules list. If an extracted rule covers the same core brand restriction or requirement as an existing rule (e.g., prohibition of unverified superlatives, substantiating numbers/durations, trademark spelling/capitalization), set "duplicate_of" to that existing rule's exact code. Otherwise, set "duplicate_of" to null.
+6. Return JSON ONLY matching the requested schema.`;
 
 /**
  * Runs the AI rule draft extraction pipeline, code validation, code assignment, and duplicate detection.
  */
 export async function runGuidelineDraftPipeline(
-  guidelineText: string,
+  rawGuidelineText: string,
   existingRules: ExistingRule[],
 ): Promise<GuidelineDraftResult> {
+  const sourceText = normalizeSourceText(rawGuidelineText);
+
   let aiRules: Array<z.infer<typeof aiRuleDraftItemSchema>> = [];
   let aiMetadata = {
     provider: "gemini",
@@ -196,8 +206,12 @@ export async function runGuidelineDraftPipeline(
     latency_ms: 0,
   };
 
+  const existingRulesSummary = existingRules.length > 0
+    ? existingRules.map((r) => `- [${r.code}] (${r.category}, ${r.severity ?? "rule"}): ${r.text}`).join("\n")
+    : "(No existing rules)";
+
   if (customDraftGenerator) {
-    const res = await customDraftGenerator(guidelineText);
+    const res = await customDraftGenerator(sourceText);
     aiRules = res.rules;
     aiMetadata = {
       provider: res.provider,
@@ -207,11 +221,18 @@ export async function runGuidelineDraftPipeline(
   } else {
     const userPrompt = `Extract all governing brand rules from the following guideline text:
 
+--- BEGIN EXISTING ACTIVE RULES ---
+${existingRulesSummary}
+--- END EXISTING ACTIVE RULES ---
+
 --- BEGIN GUIDELINE TEXT ---
-${guidelineText}
+${sourceText}
 --- END GUIDELINE TEXT ---
 
-Extract every clear governance directive as a separate rule. Ensure each source_quote is an exact verbatim quote from the text above.`;
+Extract every clear governance directive as a separate rule.
+For each rule:
+- Ensure "source_quote" is an exact verbatim quote from the guideline text above.
+- If the rule is similar to or covers the same topic as one of the existing active rules above (such as superlatives/rankings, duration/number proofs, or trademark spelling), set "duplicate_of" to that rule code. Otherwise null.`;
 
     const result = await generateJson({
       system: GUIDELINE_SYSTEM_PROMPT,
@@ -229,7 +250,7 @@ Extract every clear governance directive as a separate rule. Ensure each source_
     };
   }
 
-  // 1. Code validation of source quotes
+  // 1. Code validation of source quotes strictly on sourceText
   let rejectedCount = 0;
   const validatedDrafts: Array<{
     category: RuleCategory;
@@ -238,26 +259,29 @@ Extract every clear governance directive as a separate rule. Ensure each source_
     source_quote: string;
     source_start: number;
     source_end: number;
+    proposed_duplicate_of: string | null;
   }> = [];
 
   for (const item of aiRules) {
-    const offsets = findQuoteOffsets(guidelineText, item.source_quote);
+    const offsets = findQuoteOffsets(sourceText, item.source_quote);
     if (!offsets) {
       rejectedCount++;
       continue;
     }
+    // Strict exact quote matching slice:
+    const matchedQuote = sourceText.slice(offsets.start, offsets.end);
     validatedDrafts.push({
       category: item.category,
       severity: item.severity,
       text: item.text.trim(),
-      source_quote: item.source_quote.trim(),
+      source_quote: matchedQuote,
       source_start: offsets.start,
       source_end: offsets.end,
+      proposed_duplicate_of: item.duplicate_of ? item.duplicate_of.trim() : null,
     });
   }
 
   // 2. Code assigns next free rule codes per category
-  // Calculate current max code per category prefix
   const categoryCounters: Record<string, number> = {
     CLAIM: 0,
     TONE: 0,
@@ -265,7 +289,9 @@ Extract every clear governance directive as a separate rule. Ensure each source_
     ACC: 0,
   };
 
+  const validExistingCodes = new Set<string>();
   for (const r of existingRules) {
+    validExistingCodes.add(r.code);
     const parts = r.code.split("-");
     if (parts.length === 2) {
       const p = parts[0];
@@ -282,6 +308,12 @@ Extract every clear governance directive as a separate rule. Ensure each source_
     categoryCounters[prefix] = (categoryCounters[prefix] ?? 0) + 1;
     const nextCode = `${prefix}-${String(categoryCounters[prefix]).padStart(2, "0")}`;
 
+    // Filter proposed duplicate to ensure it exists in existing rules
+    let verifiedDup: string | null = null;
+    if (draft.proposed_duplicate_of && validExistingCodes.has(draft.proposed_duplicate_of)) {
+      verifiedDup = draft.proposed_duplicate_of;
+    }
+
     assignedDrafts.push({
       temp_id: crypto.randomUUID(),
       code: nextCode,
@@ -291,44 +323,97 @@ Extract every clear governance directive as a separate rule. Ensure each source_
       source_quote: draft.source_quote,
       source_start: draft.source_start,
       source_end: draft.source_end,
-      duplicate_of: null,
+      duplicate_of: verifiedDup,
     });
   }
 
-  // 3. Duplicate check via embeddings (cosine similarity >= 0.85)
+  // 3. Embeddings & Duplicate Verification
+  // Hybrid approach:
+  // - Batch embed in ONE call (cached existing rules + uncached rules + drafts)
+  // - If LLM proposed duplicate_of, verify cosine similarity >= 0.70 (else clear)
+  // - In addition, any draft with cosine similarity >= 0.85 to an existing rule is marked duplicate
   if (existingRules.length > 0 && assignedDrafts.length > 0) {
     try {
       const embedder = customEmbedder || embed;
-      const existingTexts = existingRules.map((r) => r.text);
-      const draftTexts = assignedDrafts.map((d) => d.text);
 
-      const [existingVectors, draftVectors] = await Promise.all([
-        embedder(existingTexts),
-        embedder(draftTexts),
-      ]);
+      // Identify which existing rules are missing from the cache
+      const uncachedRules: ExistingRule[] = [];
+      const existingVectorsMap = new Map<string, number[]>();
 
-      if (
-        Array.isArray(existingVectors) &&
-        Array.isArray(draftVectors) &&
-        existingVectors.length === existingTexts.length &&
-        draftVectors.length === draftTexts.length
-      ) {
-        for (let i = 0; i < assignedDrafts.length; i++) {
-          const draftVec = draftVectors[i];
-          let maxSimilarity = 0;
-          let matchingCode: string | null = null;
+      for (const r of existingRules) {
+        const cacheKey = r.id || `${r.code}:${r.version ?? 1}`;
+        const cached = ruleEmbeddingCache.get(cacheKey);
+        if (cached && cached.version === (r.version ?? 1) && cached.text === r.text) {
+          existingVectorsMap.set(r.code, cached.vector);
+        } else {
+          uncachedRules.push(r);
+        }
+      }
 
-          for (let j = 0; j < existingRules.length; j++) {
-            const sim = cosineSimilarity(draftVec, existingVectors[j]);
-            if (sim > maxSimilarity) {
-              maxSimilarity = sim;
-              if (sim >= 0.85) {
-                matchingCode = existingRules[j].code;
-              }
-            }
+      // Collect all texts needed to embed in a SINGLE batch call
+      const textsToEmbed: string[] = [
+        ...uncachedRules.map((r) => r.text),
+        ...assignedDrafts.map((d) => d.text),
+      ];
+
+      if (textsToEmbed.length > 0) {
+        const allVectors = await embedder(textsToEmbed);
+        if (Array.isArray(allVectors) && allVectors.length === textsToEmbed.length) {
+          // Unpack uncached rules vectors
+          for (let i = 0; i < uncachedRules.length; i++) {
+            const rule = uncachedRules[i];
+            const vec = allVectors[i];
+            const cacheKey = rule.id || `${rule.code}:${rule.version ?? 1}`;
+            ruleEmbeddingCache.set(cacheKey, {
+              vector: vec,
+              version: rule.version ?? 1,
+              text: rule.text,
+            });
+            existingVectorsMap.set(rule.code, vec);
           }
 
-          assignedDrafts[i].duplicate_of = matchingCode;
+          // Unpack drafts vectors
+          const draftVectors = allVectors.slice(uncachedRules.length);
+
+          // Evaluate similarity for each draft
+          for (let i = 0; i < assignedDrafts.length; i++) {
+            const draft = assignedDrafts[i];
+            const draftVec = draftVectors[i];
+            const proposedCode = draft.duplicate_of;
+
+            let highestSim = 0;
+            let highestCode: string | null = null;
+            let proposedSim = 0;
+
+            for (const existing of existingRules) {
+              const exVec = existingVectorsMap.get(existing.code);
+              if (!exVec) continue;
+              const sim = cosineSimilarity(draftVec, exVec);
+
+              if (existing.code === proposedCode) {
+                proposedSim = sim;
+              }
+
+              if (sim > highestSim) {
+                highestSim = sim;
+                highestCode = existing.code;
+              }
+            }
+
+            // Dual criteria:
+            // 1. If LLM proposed duplicate, accept ONLY if cosine similarity >= 0.70
+            let finalDuplicate: string | null = null;
+            if (proposedCode && proposedSim >= 0.70) {
+              finalDuplicate = proposedCode;
+            }
+
+            // 2. Fallback: if any rule has cosine similarity >= 0.85, mark as duplicate regardless of LLM
+            if (highestSim >= 0.85 && highestCode) {
+              finalDuplicate = highestCode;
+            }
+
+            draft.duplicate_of = finalDuplicate;
+          }
         }
       }
     } catch (err: any) {
@@ -336,7 +421,6 @@ Extract every clear governance directive as a separate rule. Ensure each source_
       if (err instanceof AiUnavailableError || err?.status === 503) {
         throw new AiUnavailableError(`AI embedding failed: ${err.message}`, err);
       }
-      // If embeddings are temporarily unavailable, we still flag warning or rethrow
       throw err;
     }
   }
@@ -344,6 +428,7 @@ Extract every clear governance directive as a separate rule. Ensure each source_
   return {
     drafts: assignedDrafts,
     rejected: rejectedCount,
+    source_text: sourceText,
     ai: aiMetadata,
   };
 }

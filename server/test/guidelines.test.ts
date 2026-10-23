@@ -9,6 +9,7 @@ import { signToken } from "../src/auth/jwt.js";
 import {
   setDraftGeneratorHook,
   setEmbedderHook,
+  clearRuleEmbeddingCache,
   cosineSimilarity,
   type GuidelineDraft,
 } from "../src/guidelines/pipeline.js";
@@ -89,6 +90,7 @@ Always refer to the product as an insulated steel bottle.
   beforeEach(() => {
     setDraftGeneratorHook(null);
     setEmbedderHook(null);
+    clearRuleEmbeddingCache();
   });
 
   afterEach(() => {
@@ -157,6 +159,7 @@ Always refer to the product as an insulated steel bottle.
       .send({ text: SAMPLE_GUIDELINE });
 
     expect(res.status).toBe(200);
+    expect(res.body.source_text).toBeDefined();
     expect(res.body.drafts).toHaveLength(1);
     expect(res.body.rejected).toBe(1);
     expect(res.body.drafts[0].source_quote).toBe(
@@ -164,6 +167,9 @@ Always refer to the product as an insulated steel bottle.
     );
     expect(res.body.drafts[0].source_start).toBeGreaterThanOrEqual(0);
     expect(res.body.drafts[0].source_end).toBeGreaterThan(res.body.drafts[0].source_start);
+    // Exact slice invariant test
+    const sliced = res.body.source_text.slice(res.body.drafts[0].source_start, res.body.drafts[0].source_end);
+    expect(sliced).toBe(res.body.drafts[0].source_quote);
   });
 
   it("POST /api/guidelines/draft assigns rule codes by code as the next free code", async () => {
@@ -258,6 +264,85 @@ Always refer to the product as an insulated steel bottle.
     expect(res.status).toBe(200);
     expect(res.body.drafts).toHaveLength(1);
     expect(res.body.drafts[0].duplicate_of).toBe("CLAIM-01");
+  });
+
+  it("POST /api/guidelines/draft accepts LLM proposed duplicate_of when cosine >= 0.70", async () => {
+    setDraftGeneratorHook(async () => ({
+      rules: [
+        {
+          category: "claims",
+          severity: "high",
+          text: "Avoid unproven best-in-market statements.",
+          source_quote: "Never use unverified superlatives or number one rankings without approved survey backing.",
+          duplicate_of: "CLAIM-01",
+        },
+      ],
+      provider: "test-mock",
+      model: "test-model",
+      latency_ms: 100,
+    }));
+
+    // Mock embedding so that similarity to CLAIM-01 is ~0.75 (>= 0.70)
+    setEmbedderHook(async (texts: string[]) => {
+      return texts.map((t) => {
+        const v = Array.from({ length: 768 }, () => 0);
+        if (t.includes("CLAIM-01") || t.includes("superlatives") || t.includes("No superlatives") || t.includes("Avoid unproven")) {
+          v[0] = 1;
+          v[1] = 0.5; // norm = sqrt(1.25) = 1.118
+        } else {
+          v[2] = 1;
+        }
+        return v;
+      });
+    });
+
+    const res = await request(app)
+      .post("/api/guidelines/draft")
+      .set("Authorization", `Bearer ${brandManagerToken}`)
+      .send({ text: SAMPLE_GUIDELINE });
+
+    expect(res.status).toBe(200);
+    expect(res.body.drafts).toHaveLength(1);
+    expect(res.body.drafts[0].duplicate_of).toBe("CLAIM-01");
+    // Verify source_text slice
+    expect(res.body.source_text.slice(res.body.drafts[0].source_start, res.body.drafts[0].source_end))
+      .toBe(res.body.drafts[0].source_quote);
+  });
+
+  it("POST /api/guidelines/draft rejects LLM proposed duplicate_of when cosine < 0.70", async () => {
+    setDraftGeneratorHook(async () => ({
+      rules: [
+        {
+          category: "accessibility",
+          severity: "medium",
+          text: "Always provide closed captions on audio.",
+          source_quote: "Adopt an encouraging active voice that speaks directly to the reader using you rather than impersonal prose.",
+          duplicate_of: "CLAIM-01", // Hallucinated duplicate
+        },
+      ],
+      provider: "test-mock",
+      model: "test-model",
+      latency_ms: 100,
+    }));
+
+    // Orthogonal embeddings -> cosine = 0 (< 0.70)
+    setEmbedderHook(async (texts: string[]) => {
+      return texts.map((_, idx) => {
+        const v = Array.from({ length: 768 }, () => 0);
+        v[idx % 768] = 1;
+        return v;
+      });
+    });
+
+    const res = await request(app)
+      .post("/api/guidelines/draft")
+      .set("Authorization", `Bearer ${brandManagerToken}`)
+      .send({ text: SAMPLE_GUIDELINE });
+
+    expect(res.status).toBe(200);
+    expect(res.body.drafts).toHaveLength(1);
+    // Hallucinated duplicate rejected because cosine < 0.70
+    expect(res.body.drafts[0].duplicate_of).toBeNull();
   });
 
   it("POST /api/guidelines/draft returns 503 ai_unavailable on AI failure", async () => {

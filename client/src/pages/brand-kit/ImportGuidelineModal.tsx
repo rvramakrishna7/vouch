@@ -1,4 +1,4 @@
-import { useState, useRef, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
 import { DEMO_GUIDELINE_TEXT } from "../../data/demoGuideline.js";
 
@@ -17,11 +17,17 @@ export interface GuidelineDraft {
 interface DraftResponse {
   drafts: GuidelineDraft[];
   rejected: number;
+  source_text: string;
   ai: {
     provider: string;
     model: string;
     latency_ms: number;
   };
+}
+
+interface RuleSummary {
+  code: string;
+  text: string;
 }
 
 interface ImportGuidelineModalProps {
@@ -37,6 +43,7 @@ export function ImportGuidelineModal({
 }: ImportGuidelineModalProps) {
   const [step, setStep] = useState<"input" | "review">("input");
   const [guidelineText, setGuidelineText] = useState("");
+  const [serverSourceText, setServerSourceText] = useState("");
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
 
@@ -47,8 +54,28 @@ export function ImportGuidelineModal({
   const [aiInfo, setAiInfo] = useState<{ provider: string; model: string; latency_ms: number } | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [rulesMap, setRulesMap] = useState<Map<string, string>>(new Map());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load existing rules map on open so we can show rule text in the duplicate tooltip
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    apiFetch<RuleSummary[]>("/api/rules")
+      .then((rules) => {
+        if (!mounted || !Array.isArray(rules)) return;
+        const map = new Map<string, string>();
+        for (const r of rules) {
+          map.set(r.code, r.text);
+        }
+        setRulesMap(map);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -92,7 +119,7 @@ export function ImportGuidelineModal({
       }
 
       const data: DraftResponse = await res.json();
-      setupReviewState(data, "");
+      setupReviewState(data);
     } catch (err: any) {
       handleDraftError(err);
     } finally {
@@ -116,7 +143,7 @@ export function ImportGuidelineModal({
         body: JSON.stringify({ text: guidelineText }),
       });
 
-      setupReviewState(data, guidelineText);
+      setupReviewState(data);
     } catch (err: any) {
       handleDraftError(err);
     } finally {
@@ -138,10 +165,11 @@ export function ImportGuidelineModal({
     }
   };
 
-  const setupReviewState = (data: DraftResponse, _textSource: string) => {
+  const setupReviewState = (data: DraftResponse) => {
     setDrafts(data.drafts);
     setRejectedCount(data.rejected);
     setAiInfo(data.ai);
+    setServerSourceText(data.source_text || guidelineText);
 
     // Checked by default, UNchecked if duplicate
     const initialSelected = new Set<string>();
@@ -209,9 +237,11 @@ export function ImportGuidelineModal({
     }
   };
 
-  // Helper to extract context excerpt around a source quote
+  // Helper to extract context excerpt around source quote rendered STRICTLY from source_text
   const renderExcerpt = (sourceQuote: string, start?: number, end?: number) => {
-    if (!guidelineText) {
+    const textToSearch = serverSourceText || guidelineText;
+
+    if (!textToSearch) {
       return (
         <p className="text-xs text-slate-600 italic">
           &ldquo;{sourceQuote}&rdquo;
@@ -219,32 +249,65 @@ export function ImportGuidelineModal({
       );
     }
 
-    const qStart = start !== undefined && start >= 0 ? start : guidelineText.indexOf(sourceQuote);
-    if (qStart === -1) {
+    let qStart = start !== undefined && start >= 0 ? start : -1;
+    let qEnd = end !== undefined && end > qStart ? end : -1;
+
+    // Verify if given offsets correspond to sourceQuote
+    if (qStart >= 0 && qEnd <= textToSearch.length) {
+      const candidate = textToSearch.slice(qStart, qEnd);
+      if (candidate.toLowerCase() !== sourceQuote.toLowerCase()) {
+        qStart = textToSearch.indexOf(sourceQuote);
+        if (qStart >= 0) {
+          qEnd = qStart + sourceQuote.length;
+        }
+      }
+    } else {
+      qStart = textToSearch.indexOf(sourceQuote);
+      if (qStart >= 0) {
+        qEnd = qStart + sourceQuote.length;
+      }
+    }
+
+    if (qStart === -1 || qEnd === -1) {
       return (
-        <p className="text-xs text-slate-600 italic">
-          &ldquo;{sourceQuote}&rdquo;
-        </p>
+        <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-relaxed font-mono">
+          <mark className="bg-amber-100 text-amber-900 font-semibold px-1 py-0.5 rounded border border-amber-300 mx-0.5">
+            {sourceQuote}
+          </mark>
+        </div>
       );
     }
 
-    const qEnd = end !== undefined && end > qStart ? end : qStart + sourceQuote.length;
-    const beforeIndex = Math.max(0, qStart - 60);
-    const afterIndex = Math.min(guidelineText.length, qEnd + 60);
+    // Cut excerpt at word boundaries before and after
+    let beforeIndex = Math.max(0, qStart - 60);
+    if (beforeIndex > 0) {
+      const spaceIdx = textToSearch.indexOf(" ", beforeIndex);
+      if (spaceIdx !== -1 && spaceIdx < qStart) {
+        beforeIndex = spaceIdx + 1;
+      }
+    }
 
-    const before = guidelineText.slice(beforeIndex, qStart);
-    const highlighted = guidelineText.slice(qStart, qEnd);
-    const after = guidelineText.slice(qEnd, afterIndex);
+    let afterIndex = Math.min(textToSearch.length, qEnd + 60);
+    if (afterIndex < textToSearch.length) {
+      const spaceIdx = textToSearch.lastIndexOf(" ", afterIndex);
+      if (spaceIdx !== -1 && spaceIdx > qEnd) {
+        afterIndex = spaceIdx;
+      }
+    }
+
+    const before = textToSearch.slice(beforeIndex, qStart);
+    const highlighted = textToSearch.slice(qStart, qEnd);
+    const after = textToSearch.slice(qEnd, afterIndex);
 
     return (
       <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-relaxed font-mono">
-        <span className="text-slate-400 font-sans">{beforeIndex > 0 ? "…" : ""}</span>
+        <span className="text-slate-400 font-sans">{beforeIndex > 0 ? "… " : ""}</span>
         <span>{before}</span>
         <mark className="bg-amber-100 text-amber-900 font-semibold px-1 py-0.5 rounded border border-amber-300 mx-0.5">
-          {highlighted || sourceQuote}
+          {highlighted}
         </mark>
         <span>{after}</span>
-        <span className="text-slate-400 font-sans">{afterIndex < guidelineText.length ? "…" : ""}</span>
+        <span className="text-slate-400 font-sans">{afterIndex < textToSearch.length ? " …" : ""}</span>
       </div>
     );
   };
@@ -256,10 +319,10 @@ export function ImportGuidelineModal({
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <span>Import Rules from Guideline</span>
+              <span>Import rules from guideline</span>
               {step === "review" && (
                 <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">
-                  Review &amp; Approve
+                  Review and approve
                 </span>
               )}
             </h2>
@@ -382,6 +445,10 @@ export function ImportGuidelineModal({
                 {drafts.map((draft) => {
                   const isChecked = selectedIds.has(draft.temp_id);
                   const isDup = Boolean(draft.duplicate_of);
+                  const matchedRuleText = draft.duplicate_of ? rulesMap.get(draft.duplicate_of) : undefined;
+                  const dupTooltip = matchedRuleText
+                    ? `Matched ${draft.duplicate_of}: "${matchedRuleText}"`
+                    : `Possible duplicate of ${draft.duplicate_of}`;
 
                   return (
                     <div
@@ -410,7 +477,10 @@ export function ImportGuidelineModal({
 
                         <div className="flex items-center gap-2">
                           {isDup && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md">
+                            <span
+                              title={dupTooltip}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md cursor-help"
+                            >
                               ⚠ Possible duplicate of {draft.duplicate_of}
                             </span>
                           )}
