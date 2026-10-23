@@ -93,6 +93,14 @@ The owner found on live: the "Submit for review" button was misaligned with "Run
 4. **Speed budget:** after a click, the UI shows the result within **1 s** of the server reply. Update the UI from the response first; refetch other data (activity, lists) in the background, never blocking the badge/button. Any write endpoint must answer in **under 1.5 s** on live (check the `Server-Timing` header / curl `time_total`) and report the numbers.
 5. While a request runs, show a short pending state on that button only (e.g. "Accepting…"), never freeze the page.
 
+## 7f. Responsive (owner's rule, from S12c)
+Every page must work at **375 px (phone), 768 px (tablet), 1024 px, 1280 px and 1440 px**.
+1. No horizontal page scroll at any width (`document.documentElement.scrollWidth <= clientWidth`). Wide tables become stacked cards below 768 px (or scroll inside their own container with a visible hint; the page itself never scrolls sideways).
+2. Touch targets at least 40 px high on phone; text never smaller than 12 px; nothing overlaps or is cut off.
+3. Header: below 768 px the nav collapses into a menu button; user name, role and Switch role / Sign out stay reachable.
+4. Modals are full-screen on phone with a sticky footer for their main buttons.
+5. Every UI task adds e2e checks at all five widths for the pages it touches and saves one screenshot per width. A file-editing helper script is still a temporary script and must be listed (7c.4).
+
 ## 8. Git rules
 - Repo root is this folder. Default branch `main`.
 - One task = one branch (`feat/...`, `fix/...`, `docs/...`, `chore/...`). Merge to `main` with `git merge --no-ff` only after the task's checks pass.
@@ -123,7 +131,7 @@ Libraries / generators / AI tools to disclose: <list>
 Database access: <none | every SELECT / write you ran outside the app API and tests, with purpose>
 Temporary scripts: <none | file name + purpose>
 Screenshots reviewed by me: <yes, list anything that looked wrong and how you fixed it>
-Rule compliance: 7a <ok/why not>, 7b <ok/why not>, 7c <ok/why not>, 7d <ok/why not>, 7e <ok/why not>, 8 <ok/why not>
+Rule compliance: 7a <ok/why not>, 7b <ok/why not>, 7c <ok/why not>, 7d <ok/why not>, 7e <ok/why not>, 7f <ok/why not>, 8 <ok/why not>
 Next step suggested: <one line>
 ```
 Put the report at the end of your final message. Do not summarise command output; paste it.
