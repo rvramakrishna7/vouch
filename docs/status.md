@@ -214,14 +214,16 @@ Submit, approval, lock rules, and audit API (S10a) completed and live:
     9. Fetched activity timeline (`GET /api/contents/:id/activity`): 9 chronological events returned with actor names ("Arjun Mehta", "Neha Iyer") and details
     10. Verified lock rule: attempt to create revision on approved content returned 409 `{ error: "approved_locked" }`.
 
-Approval workflow UI, Activity timeline, and Audit log (S10b) completed and live:
+Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed and live:
 - Server fixes & test coverage:
   - `server/src/routes/contents.ts`:
     - `POST /:id/revisions`: updates content status back to `draft` if creator creates revision while `in_review` (withdraws submission). Approved content remains 409 `approved_locked`.
     - `GET /:id/activity`: finding.resolve details properly reads `payload.replacement_text` and `payload.dismiss_reason`.
     - `GET /:id/activity`: deduplicates comment item when already covered by a `content.request_changes` or `content.approve` event with same revision_id and text.
+    - Resolves actor name for email actors using `LEFT JOIN users u ON (u.id::text = ae.actor OR lower(u.email) = lower(ae.actor))`.
   - `server/src/routes/audit.ts`:
     - Compound cursor `(at, id)` using `<iso>|<id>` format. Filter condition `(ae.at, ae.id) < ($at, $id::uuid)` prevents skips and duplicates across identical timestamps.
+    - Resolves actor name for email actors (`auth.demo_login` etc.) so real users are never shown as "System".
   - Vitest suite: 83/83 tests passing across 11 test files (`test/approval.test.ts` with 14 tests).
 - Client UI (`client/src/pages/ContentDetailPage.tsx`, `AuditPage.tsx`, `Header.tsx`, `StatusBadge.tsx`):
   - Status badge near title: Draft (grey), In review (blue), Changes requested (amber), Approved (emerald).
@@ -234,14 +236,17 @@ Approval workflow UI, Activity timeline, and Audit log (S10b) completed and live
   - Audit log screen (`/audit`):
     - Accessible via header navigation link for `reviewer` and `brand_manager`; hidden for `creator` (who gets redirected if accessed directly).
     - Features append-only notice, action filter dropdown, full table (Time, Actor, Action, Entity, Details), and "Load more" button powered by compound cursor pagination.
-  - Definition of Done verification:
+    - Human-readable Details formatting for every distinct DB action; short generic fallback eliminates all raw JSON (`{"`). Safe date and actor formatting.
+  - Definition of Done & Quality verification (AGENTS.md 7b & 7d):
     - 3/3 Playwright E2E tests passing headless (`resolve.spec.ts` + `approval.spec.ts`).
-    - 7 step screenshots saved in `client/e2e/screenshots/`.
-    - `assertCleanText` verifies no raw HTML entities on any page.
+    - Extended `assertCleanText` enforces zero unescaped HTML entities, zero icon text words, and zero placeholder/corrupted strings (`Unknown`, `Invalid Date`, `NaN`, `undefined`, `null`, `[object Object]`, and raw JSON `{"`).
+    - Complete and realistic mock fixtures across all routes.
+    - Dedicated E2E assertions for "Load more" pagination, including verification that `before=<cursor>` was requested and rows appended.
+    - 8 step screenshots saved in `client/e2e/screenshots/` and individually inspected.
 - Live API verification on Vercel deployment (`https://vouch-ten-iota.vercel.app`):
   - Authenticated as Reviewer (Neha Iyer).
   - `GET /api/contents/00d76e9e-ecc2-4024-957f-81a4eb94aefd/activity`: 8 events returned in exact order.
-  - `GET /api/audit?limit=3` and `GET /api/audit?limit=3&before=<cursor>`: compound cursor pagination verified without overlap.
+  - `GET /api/audit?limit=5`: verified live returning real user names ("Neha Iyer", "Priya Sharma") with zero "System" entries for real users. Compound cursor pagination verified without overlap.
 
 Verified row counts:
 - schema_migrations: 4
