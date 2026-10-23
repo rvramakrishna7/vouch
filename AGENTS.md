@@ -2,6 +2,10 @@
 
 These rules apply to every task in this workspace. Read this file fully before you act. If an instruction in a task prompt conflicts with this file, STOP and ask.
 
+> **ZERO TOLERANCE (owner's rule, from S10b onward).** Every rule in this file is mandatory, not advice. The owner and Claude check every report against this file. A report that breaks any rule is **REJECTED** and the task is redone, even if the feature works. Section 11 lists the rules you have already broken; repeating one of them is the most serious failure.
+>
+> **First line of every task reply:** `AGENTS.md read in full. Rules I must watch in this task: <list section numbers>.`
+
 ## 1. Who does what
 | Role | Who | Responsibility |
 |---|---|---|
@@ -67,6 +71,20 @@ S9b was reported DONE, but on the live app the buttons did not work (every findi
 4. A UI task is DONE only if: client build passes AND the e2e test passes. Otherwise Status = PARTIAL.
 5. Before writing UI logic that depends on a field, check its possible values in the migrations and the route that returns it. Never assume null/empty defaults.
 
+## 7c. Data safety (owner's rule, mandatory, added after the S10a violation)
+In S10a you wrote an ad-hoc script and **deleted rows from the shared Supabase database without asking**. The live demo runs on that same database. This must never happen again.
+1. You may **INSERT/UPDATE/DELETE** data only (a) through the app's own API, or (b) inside an automated test that deletes ONLY the rows that same test created.
+2. **Never** run ad-hoc SQL or scripts that change or delete existing rows, never run `db:seed`, never truncate. If data blocks you (duplicates, stale rows), **STOP and report** the exact rows; the owner decides.
+3. Read-only queries (SELECT) are allowed only for diagnosis. List every one in the report under "Database access".
+4. Temporary scripts must be listed in the report (file name + purpose) even if you delete them afterwards.
+
+## 7d. Mock and screenshot quality (owner's rule, added after S10b)
+In S10b the e2e mocks left out fields, so the screenshots showed "Unknown", "Invalid Date", "NaN% confidence", an empty channel and "Suggestion (no rule cited)". A test that passes on fake broken data proves nothing.
+1. Every mocked object must contain **every field the real route returns**, with realistic values copied from the route's SQL/response and from `docs/demo-brand.md`. Reuse and extend the fixtures in `client/e2e/resolve.spec.ts`.
+2. `assertCleanText` must also fail on: `Unknown`, `Invalid Date`, `NaN`, `undefined`, `null`, `[object Object]`, and raw JSON (`{"`) in visible text.
+3. **Look at your own screenshots** before reporting. If anything looks wrong, empty or placeholder-like, it is a FAIL; fix it first.
+4. If the live app could show one of these values (e.g. an audit actor that is an email, not a user id), handle it in the UI; do not hide it in the mock.
+
 ## 8. Git rules
 - Repo root is this folder. Default branch `main`.
 - One task = one branch (`feat/...`, `fix/...`, `docs/...`, `chore/...`). Merge to `main` with `git merge --no-ff` only after the task's checks pass.
@@ -94,6 +112,21 @@ Manual check: <exact steps the owner can repeat, and the expected result>
 Deviations from the prompt: <none | list with reason>
 Decisions needed: <none | DEC-xxx (Proposed): problem, options, recommendation>
 Libraries / generators / AI tools to disclose: <list>
+Database access: <none | every SELECT / write you ran outside the app API and tests, with purpose>
+Temporary scripts: <none | file name + purpose>
+Screenshots reviewed by me: <yes, list anything that looked wrong and how you fixed it>
+Rule compliance: 7a <ok/why not>, 7b <ok/why not>, 7c <ok/why not>, 7d <ok/why not>, 8 <ok/why not>
 Next step suggested: <one line>
 ```
 Put the report at the end of your final message. Do not summarise command output; paste it.
+
+## 11. Violations log (read it; do not repeat any of these)
+| Task | Rule broken | What happened |
+|---|---|---|
+| S5/S6 | 7a | Marked tests PASS without running them live; invented a user "Meera Patel" and wrong emails/dates. |
+| S9b | 7a, 7b | Reported DONE; on the live app every resolve button was broken ("open" treated as resolved). |
+| S9c | 7a.4 | Manual check used a made-up email `arjun@aqualeaf.demo` (real: `demo.creator@aqualeaf.test`). |
+| S10a | 7c | Deleted rows from the shared database with an ad-hoc script, without owner approval. |
+| S10b | 7b, 7d | Incomplete mocks; screenshots showed "Unknown", "Invalid Date", "NaN% confidence", raw JSON in the audit table; "Load more" not shown. |
+
+Each new violation is added here with the task ID.
