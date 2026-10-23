@@ -160,7 +160,7 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
           Numbered brand rules that govern claims, tone of voice, terminology usage, and accessibility standards.
         </p>
@@ -324,7 +324,7 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
           <div className="p-8 text-center text-sm text-slate-500">No brand rules registered yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm divide-y divide-slate-200">
+            <table className="stack-table w-full text-left text-sm divide-y divide-slate-200">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Code</th>
@@ -339,22 +339,22 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
               <tbody className="divide-y divide-slate-100">
                 {rules.map((rule) => (
                   <tr key={rule.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                    <td data-label="Code" className="px-4 py-3 font-mono font-semibold text-slate-900 whitespace-nowrap">
                       {rule.code}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap">
+                    <td data-label="Category" className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap">
                       {rule.category}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td data-label="Severity" className="px-4 py-3 whitespace-nowrap">
                       {severityBadge(rule.severity)}
                     </td>
-                    <td className="px-4 py-3 text-slate-800 max-w-md">
+                    <td data-label="Rule" className="px-4 py-3 text-slate-800 max-w-md">
                       {rule.text}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 font-mono text-xs whitespace-nowrap">
+                    <td data-label="Version" className="px-4 py-3 text-slate-500 font-mono text-xs whitespace-nowrap">
                       v{rule.version}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td data-label="Status" className="px-4 py-3 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           rule.status === "active"
@@ -366,7 +366,7 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
                       </span>
                     </td>
                     {isBrandManager && (
-                      <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
+                      <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap space-x-2">
                         <button
                           type="button"
                           onClick={() => handleStartEdit(rule)}

@@ -104,58 +104,60 @@ export function ReviewsPage() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
-              <tr>
-                <th className="px-6 py-3.5">Title</th>
-                <th className="px-6 py-3.5">Channel</th>
-                <th className="px-6 py-3.5">Creator</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Revision</th>
-                <th className="px-6 py-3.5">Updated</th>
-                <th className="px-6 py-3.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {contents.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/75 transition-colors">
-                  <td className="px-6 py-4">
-                    <Link
-                      to={`/content/${item.id}`}
-                      className="font-medium text-slate-900 hover:text-blue-600 transition-colors"
-                    >
-                      {item.title}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
-                      {item.channel}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-xs font-medium text-slate-700">
-                    {item.created_by_name || "Unknown"}
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={item.status} />
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                    Rev {item.latest_revision_number}
-                  </td>
-                  <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
-                    {formatDate(item.updated_at)}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      to={`/content/${item.id}`}
-                      className="text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
-                    >
-                      Review →
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="stack-table w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
+                <tr>
+                  <th className="px-6 py-3.5">Title</th>
+                  <th className="px-6 py-3.5">Channel</th>
+                  <th className="px-6 py-3.5">Creator</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Revision</th>
+                  <th className="px-6 py-3.5">Updated</th>
+                  <th className="px-6 py-3.5 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {contents.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/75 transition-colors">
+                    <td data-label="Title" className="px-6 py-4">
+                      <Link
+                        to={`/content/${item.id}`}
+                        className="font-medium text-slate-900 hover:text-blue-600 transition-colors"
+                      >
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td data-label="Channel" className="px-6 py-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
+                        {item.channel}
+                      </span>
+                    </td>
+                    <td data-label="Creator" className="px-6 py-4 text-xs font-medium text-slate-700">
+                      {item.created_by_name || "Unknown"}
+                    </td>
+                    <td data-label="Status" className="px-6 py-4">
+                      <StatusBadge status={item.status} />
+                    </td>
+                    <td data-label="Revision" className="px-6 py-4 font-mono text-xs text-slate-500">
+                      Rev {item.latest_revision_number}
+                    </td>
+                    <td data-label="Updated" className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
+                      {formatDate(item.updated_at)}
+                    </td>
+                    <td data-label="Action" className="px-6 py-4 text-right">
+                      <Link
+                        to={`/content/${item.id}`}
+                        className="inline-flex items-center min-h-11 md:min-h-0 text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
+                      >
+                        Review →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

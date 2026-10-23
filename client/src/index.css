@@ -1,1 +1,84 @@
 @import "tailwindcss";
+
+/*
+ * Responsive tables (AGENTS.md 7f): below 768 px a table with class
+ * "stack-table" becomes a list of stacked cards. Each <td> carries a
+ * data-label that is shown as the field name. From md up it is a normal table.
+ */
+@media (max-width: 767px) {
+  table.stack-table,
+  table.stack-table tbody {
+    display: block;
+    width: 100%;
+  }
+  table.stack-table thead {
+    display: none;
+  }
+  table.stack-table tr {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.stack-table tr:last-child {
+    border-bottom: 0;
+  }
+  table.stack-table td {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0.3rem 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere;
+  }
+  table.stack-table td::before {
+    content: attr(data-label);
+    flex: none;
+    width: 6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: none;
+    letter-spacing: normal;
+    padding-top: 0.1rem;
+  }
+  table.stack-table td:not([data-label])::before,
+  table.stack-table td[data-label=""]::before {
+    display: none;
+  }
+  table.stack-table td > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  table.stack-table td[data-label="Actions"],
+  table.stack-table td[data-label="Action"] {
+    padding-top: 0.6rem !important;
+  }
+}
+
+/* Touch targets (AGENTS.md 7f.2): at least 40 px high on phone. */
+@media (max-width: 767px) {
+  a:not(.touch-auto),
+  button:not(.touch-auto),
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  summary {
+    min-height: 2.5rem;
+  }
+  a:not(.touch-auto),
+  button:not(.touch-auto) {
+    display: inline-flex;
+    align-items: center;
+  }
+  textarea {
+    font-size: 16px;
+  }
+  select,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    font-size: 16px;
+  }
+}

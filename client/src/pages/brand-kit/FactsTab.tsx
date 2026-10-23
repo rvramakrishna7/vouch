@@ -130,7 +130,7 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
           Approved facts with verifiable sources and expiry dates. Claims in marketing copy cite these numbered facts.
         </p>
@@ -307,7 +307,7 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
           <div className="p-8 text-center text-sm text-slate-500">No approved facts registered yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm divide-y divide-slate-200">
+            <table className="stack-table w-full text-left text-sm divide-y divide-slate-200">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Code</th>
@@ -322,22 +322,22 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
               <tbody className="divide-y divide-slate-100">
                 {facts.map((fact) => (
                   <tr key={fact.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                    <td data-label="Code" className="px-4 py-3 font-mono font-semibold text-slate-900 whitespace-nowrap">
                       {fact.code}
                     </td>
-                    <td className="px-4 py-3 text-slate-800 max-w-md font-medium">
+                    <td data-label="Statement" className="px-4 py-3 text-slate-800 max-w-md font-medium">
                       {fact.statement}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 text-xs max-w-xs">
+                    <td data-label="Source" className="px-4 py-3 text-slate-600 text-xs max-w-xs">
                       {fact.source}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td data-label="Owner" className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
                       {fact.owner || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
+                    <td data-label="Valid until" className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
                       {fact.valid_until.slice(0, 10)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td data-label="Status" className="px-4 py-3 whitespace-nowrap">
                       {fact.expired ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 border border-red-200 animate-pulse">
                           Expired
@@ -349,7 +349,7 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
                       )}
                     </td>
                     {isBrandManager && (
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleStartEdit(fact)}

@@ -35,7 +35,7 @@ export function ProtectedLayout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       <Header />
-      <main className="max-w-6xl w-full mx-auto p-6 flex-1">
+      <main className="max-w-6xl w-full mx-auto p-4 md:p-6 flex-1 min-w-0">
         <Outlet />
       </main>
     </div>

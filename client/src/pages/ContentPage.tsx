@@ -43,7 +43,7 @@ export function ContentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             My Content
@@ -55,7 +55,7 @@ export function ContentPage() {
 
         <Link
           to="/content/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-11 sm:min-h-0 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
         >
           <svg
             className="w-4 h-4"
@@ -118,7 +118,7 @@ export function ContentPage() {
           <div className="mt-6">
             <Link
               to="/content/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 min-h-11 sm:min-h-0 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
             >
               + New content
             </Link>
@@ -126,54 +126,56 @@ export function ContentPage() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
-              <tr>
-                <th className="px-6 py-3.5">Title</th>
-                <th className="px-6 py-3.5">Channel</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Latest Revision</th>
-                <th className="px-6 py-3.5">Updated</th>
-                <th className="px-6 py-3.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {contents.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/75 transition-colors">
-                  <td className="px-6 py-4">
-                    <Link
-                      to={`/content/${item.id}`}
-                      className="font-medium text-slate-900 hover:text-blue-600 transition-colors"
-                    >
-                      {item.title}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
-                      {item.channel}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={item.status} />
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                    Rev {item.latest_revision_number}
-                  </td>
-                  <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
-                    {formatDate(item.updated_at)}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      to={`/content/${item.id}`}
-                      className="text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
-                    >
-                      View →
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="stack-table w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
+                <tr>
+                  <th className="px-6 py-3.5">Title</th>
+                  <th className="px-6 py-3.5">Channel</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Latest Revision</th>
+                  <th className="px-6 py-3.5">Updated</th>
+                  <th className="px-6 py-3.5 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {contents.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/75 transition-colors">
+                    <td data-label="Title" className="px-6 py-4">
+                      <Link
+                        to={`/content/${item.id}`}
+                        className="font-medium text-slate-900 hover:text-blue-600 transition-colors"
+                      >
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td data-label="Channel" className="px-6 py-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
+                        {item.channel}
+                      </span>
+                    </td>
+                    <td data-label="Status" className="px-6 py-4">
+                      <StatusBadge status={item.status} />
+                    </td>
+                    <td data-label="Revision" className="px-6 py-4 font-mono text-xs text-slate-500">
+                      Rev {item.latest_revision_number}
+                    </td>
+                    <td data-label="Updated" className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
+                      {formatDate(item.updated_at)}
+                    </td>
+                    <td data-label="Action" className="px-6 py-4 text-right">
+                      <Link
+                        to={`/content/${item.id}`}
+                        className="inline-flex items-center min-h-11 md:min-h-0 text-xs font-semibold text-slate-900 hover:text-blue-600 transition-colors"
+                      >
+                        View →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

@@ -160,7 +160,7 @@ export function NewContentPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
             <Link to="/content" className="hover:text-slate-900 transition-colors">
@@ -178,7 +178,7 @@ export function NewContentPage() {
         <button
           type="button"
           onClick={handleUseSample}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-slate-200"
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-11 sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-slate-200"
         >
           <svg
             className="w-3.5 h-3.5 text-slate-500"
@@ -211,7 +211,7 @@ export function NewContentPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm space-y-6"
+        className="bg-white border border-slate-200 rounded-xl p-4 sm:p-8 shadow-sm space-y-6"
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="sm:col-span-2 space-y-1.5">
@@ -326,7 +326,7 @@ export function NewContentPage() {
                 type="button"
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-11 sm:min-h-0 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
               >
                 <svg
                   className="w-3.5 h-3.5 text-slate-500"
@@ -357,23 +357,23 @@ export function NewContentPage() {
             className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent font-mono"
           />
 
-          <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-400">
             <span>Supports direct text editing or plain text from extracted DOCX.</span>
             <span>{body.length.toLocaleString()} / 20,000 characters</span>
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+        <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
           <Link
             to="/content"
-            className="px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 min-h-11 sm:min-h-0 inline-flex items-center justify-center border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={submitting}
-            className="px-5 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            className="px-5 py-2 min-h-11 sm:min-h-0 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
           >
             {submitting ? "Saving…" : "Save content"}
           </button>

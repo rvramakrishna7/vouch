@@ -349,10 +349,10 @@ export function ImportGuidelineModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
+      <div className="bg-white sm:rounded-2xl shadow-xl sm:border border-slate-200 w-full max-w-4xl h-full sm:h-auto max-h-full sm:max-h-[90vh] flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50 shrink-0">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-slate-50/50 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <span>Import rules from guideline</span>
@@ -379,7 +379,7 @@ export function ImportGuidelineModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
           {step === "input" ? (
             <div className="space-y-4">
               {draftError && (
@@ -392,7 +392,7 @@ export function ImportGuidelineModal({
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Guideline Document Text
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleUseSample}
@@ -400,7 +400,7 @@ export function ImportGuidelineModal({
                   >
                     Use sample guideline
                   </button>
-                  <label className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition cursor-pointer border border-slate-300 inline-flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 min-h-10 sm:min-h-0 rounded-lg transition cursor-pointer border border-slate-300 inline-flex items-center gap-1.5">
                     <span>Upload DOCX</span>
                     <input
                       ref={fileInputRef}
@@ -423,7 +423,7 @@ export function ImportGuidelineModal({
                 className="w-full text-xs font-mono p-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 bg-slate-50/50 leading-relaxed disabled:opacity-50"
               />
 
-              <div className="flex items-center justify-between text-xs text-slate-500">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-500 sticky bottom-0 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-0 bg-white border-t border-slate-200 sm:border-0">
                 <span>{guidelineText.length} characters (min 50)</span>
                 <button
                   type="button"
@@ -499,23 +499,23 @@ export function ImportGuidelineModal({
                     >
                       {/* Card Header */}
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <label className="flex items-center gap-2.5 min-h-10 sm:min-h-0 cursor-pointer select-none">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSelect(draft.temp_id)}
-                            className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 cursor-pointer"
+                            className="w-5 h-5 sm:w-4 sm:h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 cursor-pointer"
                           />
                           <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
                             {draft.code}
                           </span>
                         </label>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           {isDup && (
                             <span
                               title={dupTooltip}
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md cursor-help"
+                              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md cursor-help"
                             >
                               ⚠ Possible duplicate of {draft.duplicate_of}
                             </span>
@@ -554,7 +554,7 @@ export function ImportGuidelineModal({
 
                       {/* Rule Text (Editable) */}
                       <div className="space-y-1.5 mb-3">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                           Rule Statement (Editable)
                         </label>
                         <textarea
@@ -569,7 +569,7 @@ export function ImportGuidelineModal({
 
                       {/* Source Quote with Context Excerpt */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
                           <span>Evidence: Source Quote from Guideline</span>
                           <span className="text-emerald-700 font-semibold font-sans normal-case">
                             ✓ Quote verified in text
@@ -587,11 +587,11 @@ export function ImportGuidelineModal({
 
         {/* Footer (Step 2 Review only) */}
         {step === "review" && (
-          <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between gap-4 shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 shrink-0">
             <span className="text-sm font-semibold text-slate-700">
               {selectedIds.size} selected of {drafts.length} rules
             </span>
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
               <button
                 type="button"
                 onClick={() => setStep("input")}
