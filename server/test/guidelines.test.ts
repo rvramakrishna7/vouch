@@ -221,12 +221,27 @@ Always refer to the product as an insulated steel bottle.
     const toneDraft = res.body.drafts.find((d: GuidelineDraft) => d.category === "tone");
     const termDraft = res.body.drafts.find((d: GuidelineDraft) => d.category === "terminology");
 
-    // Since CLAIM-01..CLAIM-04 exist, next must be CLAIM-05
-    expect(claimDraft?.code).toBe("CLAIM-05");
-    // Since TONE-01..TONE-02 exist, next must be TONE-03
-    expect(toneDraft?.code).toBe("TONE-03");
-    // Since TERM-01..TERM-02 exist, next must be TERM-03
-    expect(termDraft?.code).toBe("TERM-03");
+    // Read current max codes from DB to compute expected codes
+    const { rows: dbRules } = await pool.query<{ code: string }>(
+      "SELECT code FROM rules WHERE organization_id = $1 AND status != 'archived'",
+      [aqualeafOrgId],
+    );
+    let maxClaim = 0;
+    let maxTone = 0;
+    let maxTerm = 0;
+    for (const r of dbRules) {
+      const parts = r.code.split("-");
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num)) {
+        if (parts[0] === "CLAIM" && num > maxClaim) maxClaim = num;
+        if (parts[0] === "TONE" && num > maxTone) maxTone = num;
+        if (parts[0] === "TERM" && num > maxTerm) maxTerm = num;
+      }
+    }
+
+    expect(claimDraft?.code).toBe(`CLAIM-${String(maxClaim + 1).padStart(2, "0")}`);
+    expect(toneDraft?.code).toBe(`TONE-${String(maxTone + 1).padStart(2, "0")}`);
+    expect(termDraft?.code).toBe(`TERM-${String(maxTerm + 1).padStart(2, "0")}`);
   });
 
   it("POST /api/guidelines/draft flags duplicates when cosine similarity >= 0.85", async () => {

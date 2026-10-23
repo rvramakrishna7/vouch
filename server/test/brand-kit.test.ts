@@ -113,6 +113,20 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
   });
 
   it("brand manager creates a claims rule and gets the next CLAIM-xx code", async () => {
+    // 1. Inspect current max code for claims in this org
+    const { rows: existingRules } = await pool.query<{ code: string }>(
+      "SELECT code FROM rules WHERE category = 'claims' AND status != 'archived'",
+    );
+    let maxClaim = 0;
+    for (const r of existingRules) {
+      const parts = r.code.split("-");
+      if (parts[0] === "CLAIM") {
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxClaim) maxClaim = num;
+      }
+    }
+    const expectedCode = `CLAIM-${String(maxClaim + 1).padStart(2, "0")}`;
+
     const res = await request(app)
       .post("/api/rules")
       .set("Authorization", `Bearer ${brandManagerToken}`)
@@ -123,7 +137,7 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.code).toBe("CLAIM-05");
+    expect(res.body.code).toBe(expectedCode);
     expect(res.body.version).toBe(1);
     createdRuleId = res.body.id;
   });
@@ -234,5 +248,17 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
     );
 
     expect(rows[0].count).toBeGreaterThanOrEqual(1);
+  });
+
+  afterAll(async () => {
+    if (createdRuleId) {
+      await pool.query("DELETE FROM rules WHERE id = $1", [createdRuleId]);
+    }
+    if (createdFactId) {
+      await pool.query("DELETE FROM facts WHERE id = $1", [createdFactId]);
+    }
+    if (createdTermId) {
+      await pool.query("DELETE FROM terms WHERE id = $1", [createdTermId]);
+    }
   });
 });
