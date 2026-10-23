@@ -85,6 +85,14 @@ In S10b the e2e mocks left out fields, so the screenshots showed "Unknown", "Inv
 3. **Look at your own screenshots** before reporting. If anything looks wrong, empty or placeholder-like, it is a FAIL; fix it first.
 4. If the live app could show one of these values (e.g. an audit actor that is an email, not a user id), handle it in the UI; do not hide it in the mock.
 
+## 7e. UI polish and speed (owner's rule, mandatory, added after the S10b.1 live check)
+The owner found on live: the "Submit for review" button was misaligned with "Run Vouch review"; long audit details overflowed the table; "Accept fix" and "Approve with override" took 5-6 s before the badge changed. Judges see these first.
+1. **Layout:** buttons in one action row share height, baseline and spacing; helper text never pushes a button out of line. Nothing may overflow its card or the viewport: long text wraps or is truncated with the full value in a `title` tooltip. Long ids are shortened (e.g. `content · fd4ebc26`).
+2. **Every e2e test checks layout** at 1280 px and 1440 px width: `document.documentElement.scrollWidth <= clientWidth`, and for each table/card that its `scrollWidth <= clientWidth`. Mock data must include the LONGEST realistic values (long titles, long comments, long override reasons, full UUIDs).
+3. **One date format everywhere** in the UI, from one shared helper (e.g. `23 Oct 2026, 11:08`). Spelling and capitalisation of labels must be consistent (sentence case).
+4. **Speed budget:** after a click, the UI shows the result within **1 s** of the server reply. Update the UI from the response first; refetch other data (activity, lists) in the background, never blocking the badge/button. Any write endpoint must answer in **under 1.5 s** on live (check the `Server-Timing` header / curl `time_total`) and report the numbers.
+5. While a request runs, show a short pending state on that button only (e.g. "Accepting…"), never freeze the page.
+
 ## 8. Git rules
 - Repo root is this folder. Default branch `main`.
 - One task = one branch (`feat/...`, `fix/...`, `docs/...`, `chore/...`). Merge to `main` with `git merge --no-ff` only after the task's checks pass.
@@ -115,7 +123,7 @@ Libraries / generators / AI tools to disclose: <list>
 Database access: <none | every SELECT / write you ran outside the app API and tests, with purpose>
 Temporary scripts: <none | file name + purpose>
 Screenshots reviewed by me: <yes, list anything that looked wrong and how you fixed it>
-Rule compliance: 7a <ok/why not>, 7b <ok/why not>, 7c <ok/why not>, 7d <ok/why not>, 8 <ok/why not>
+Rule compliance: 7a <ok/why not>, 7b <ok/why not>, 7c <ok/why not>, 7d <ok/why not>, 7e <ok/why not>, 8 <ok/why not>
 Next step suggested: <one line>
 ```
 Put the report at the end of your final message. Do not summarise command output; paste it.
@@ -128,5 +136,6 @@ Put the report at the end of your final message. Do not summarise command output
 | S9c | 7a.4 | Manual check used a made-up email `arjun@aqualeaf.demo` (real: `demo.creator@aqualeaf.test`). |
 | S10a | 7c | Deleted rows from the shared database with an ad-hoc script, without owner approval. |
 | S10b | 7b, 7d | Incomplete mocks; screenshots showed "Unknown", "Invalid Date", "NaN% confidence", raw JSON in the audit table; "Load more" not shown. |
+| S10b.1 | 7e | Live: Submit button misaligned, audit Details overflowed the table, Accept fix / Approve took 5-6 s, three different date formats, creator could still edit while "In review". |
 
 Each new violation is added here with the task ID.
