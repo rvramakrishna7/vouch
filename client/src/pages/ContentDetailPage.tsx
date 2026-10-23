@@ -4,6 +4,7 @@ import { diffWords } from "diff";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { useAuth } from "../auth/AuthContext.js";
+import { formatDate } from "../lib/format.js";
 
 interface Revision {
   id: string;
@@ -255,6 +256,11 @@ export function ContentDetailPage() {
   const [overrideHighCount, setOverrideHighCount] = useState<number | null>(null);
   const [overrideAiStatus, setOverrideAiStatus] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [latestApproval, setLatestApproval] = useState<{
+    user_name?: string;
+    override_reason?: string | null;
+    created_at?: string;
+  } | null>(null);
 
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -358,7 +364,8 @@ export function ContentDetailPage() {
       );
       setReview(res.review);
       setFindings(res.findings);
-      await fetchActivity();
+      setReviewRunning(false);
+      void fetchActivity();
     } catch (err) {
       console.error("Run review failed:", err);
       if (err instanceof ApiError) {
@@ -436,7 +443,8 @@ export function ContentDetailPage() {
       setActiveEditId(null);
       setActiveDismissId(null);
       setActiveChangeId(null);
-      await fetchActivity();
+      setResolvingFindingId(null);
+      void fetchActivity();
     } catch (err) {
       console.error("Resolution failed:", err);
       if (
@@ -605,7 +613,8 @@ export function ContentDetailPage() {
         { method: "POST" },
       );
       setContent(res.content);
-      await fetchActivity();
+      setSubmitting(false);
+      void fetchActivity();
     } catch (err) {
       const errData = err instanceof ApiError ? (err.data as any) : null;
       if (err instanceof ApiError && err.status === 409 && (errData?.error === "review_required" || err.message === "review_required")) {
@@ -638,7 +647,8 @@ export function ContentDetailPage() {
       setContent(res.content);
       setRequestChangesComment("");
       setRequestChangesOpen(false);
-      await fetchActivity();
+      setRequestingChanges(false);
+      void fetchActivity();
     } catch (err) {
       if (err instanceof ApiError) {
         setActionError(err.message);
@@ -667,9 +677,17 @@ export function ContentDetailPage() {
         },
       );
       setContent(res.content);
+      if (res.approval) {
+        setLatestApproval({
+          user_name: user?.name || "Reviewer",
+          override_reason: res.approval.override_reason || (withOverride ? overrideReason.trim() : null),
+          created_at: res.approval.created_at || new Date().toISOString(),
+        });
+      }
       setOverrideDialogOpen(false);
       setOverrideReason("");
-      await fetchActivity();
+      setApproving(false);
+      void fetchActivity();
     } catch (err) {
       const errData = err instanceof ApiError ? (err.data as any) : null;
       if (err instanceof ApiError && err.status === 409 && (errData?.error === "override_required" || err.message === "override_required")) {
@@ -797,13 +815,22 @@ export function ContentDetailPage() {
   const isInReview = content?.status === "in_review";
   const isChangesRequested = content?.status === "changes_requested";
   const isDraft = content?.status === "draft";
-  const canResolve = Boolean(isCreatorOwner && isLatestReview && !staleReviewAlert && !isApproved);
+  const canResolve = Boolean(
+    isCreatorOwner && isLatestReview && !staleReviewAlert && !isApproved && !isInReview,
+  );
 
-  // Derived from activity
+  // Derived from latestApproval or activity
   const approvedEvent = activity.slice().reverse().find((a) => a.action === "content.approve");
-  const approvedBy = approvedEvent?.actor_name || "Reviewer";
-  const approvedDate = approvedEvent ? new Date(approvedEvent.time).toLocaleDateString() : "";
-  const approvedOverrideReason = approvedEvent?.details?.override_reason;
+  const approvedBy = latestApproval?.user_name || approvedEvent?.actor_name || "Reviewer";
+  const approvedDate = latestApproval?.created_at
+    ? formatDate(latestApproval.created_at)
+    : approvedEvent
+    ? formatDate(approvedEvent.time)
+    : "";
+  const approvedOverrideReason =
+    latestApproval?.override_reason !== undefined
+      ? latestApproval.override_reason
+      : approvedEvent?.details?.override_reason;
 
   const requestChangesEvent = activity.slice().reverse().find((a) => a.action === "content.request_changes");
 
@@ -1113,20 +1140,20 @@ export function ContentDetailPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Top Breadcrumb & Action banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <Link
             to={backLink}
             className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 mb-2"
           >
             ← Back to {backLabel}
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center flex-wrap gap-3">
             {loading ? (
               <div className="h-8 w-64 bg-slate-200 rounded-md animate-pulse" />
             ) : (
               <>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 break-words">
                   {content?.title}
                 </h1>
                 {content && <StatusBadge status={content.status} />}
@@ -1135,60 +1162,74 @@ export function ContentDetailPage() {
           </div>
         </div>
 
-        {/* Run Vouch review and Submit buttons */}
-        <div className="flex items-center gap-3 self-start sm:self-auto flex-wrap justify-end">
-          {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && (
-            <div className="flex flex-col items-end gap-1">
+        {/* Run Vouch review and Submit buttons in ONE row, with hint below */}
+        <div className="shrink-0 flex flex-col items-end gap-1.5 self-start sm:self-auto">
+          <div className="flex items-center gap-3">
+            {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (
               <button
                 type="button"
                 disabled={submitting || !isLatestReview}
                 onClick={handleSubmitForReview}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
               >
                 {submitting ? "Submitting…" : "Submit for review"}
               </button>
-              {(!isLatestReview || submitHint) && (
-                <span className="text-[11px] text-amber-700 font-medium">
-                  {submitHint || "Run Vouch review on the latest revision first"}
-                </span>
-              )}
-            </div>
-          )}
+            )}
 
-          {!isApproved && (
-            <button
-              type="button"
-              disabled={loading || reviewRunning || !latestRevision}
-              onClick={handleRunReview}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {reviewRunning ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Reviewing…</span>
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4 text-slate-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span>Run Vouch review</span>
-                </>
-              )}
-            </button>
+            {!isApproved && !isInReview && (
+              <button
+                type="button"
+                disabled={loading || reviewRunning || !latestRevision}
+                onClick={handleRunReview}
+                className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+              >
+                {reviewRunning ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Reviewing…</span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4 text-slate-300"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span>Run Vouch review</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Hint goes below the row, right-aligned, small grey text (never shifts buttons) */}
+          {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (!isLatestReview || submitHint) && (
+            <span className="text-[11px] text-slate-500 font-normal whitespace-nowrap">
+              {submitHint || "Run Vouch review on the latest revision first"}
+            </span>
           )}
         </div>
       </div>
+
+      {/* Neutral In-Review Banner for Creator */}
+      {isCreatorOwner && isInReview && (
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700 flex items-center gap-2.5 shadow-sm">
+          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 font-bold text-xs">
+            ℹ
+          </span>
+          <span className="font-medium">
+            Submitted for review. Waiting for a reviewer.
+          </span>
+        </div>
+      )}
 
       {/* Progress Line while Review Runs */}
       {reviewRunning && (
@@ -1476,16 +1517,8 @@ export function ContentDetailPage() {
           {loading ? (
             <div className="h-5 w-24 bg-slate-200 rounded animate-pulse" />
           ) : (
-            <span className="text-sm text-slate-700">
-              {content && content.updated_at && !isNaN(new Date(content.updated_at).getTime())
-                ? new Date(content.updated_at).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—"}
+            <span className="text-sm text-slate-700 whitespace-nowrap">
+              {formatDate(content?.updated_at)}
             </span>
           )}
         </div>
@@ -1690,20 +1723,10 @@ export function ContentDetailPage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <div className="flex items-center gap-3 text-xs text-slate-500 whitespace-nowrap">
                           <span>{rev.created_by_name || content?.created_by_name || "Arjun Mehta"}</span>
                           <span>•</span>
-                          <span>
-                            {rev.created_at && !isNaN(new Date(rev.created_at).getTime())
-                              ? new Date(rev.created_at).toLocaleDateString(undefined, {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "—"}
-                          </span>
+                          <span>{formatDate(rev.created_at)}</span>
                           <span
                             className={`transition-transform text-slate-400 font-bold ${
                               isExpanded ? "rotate-180" : ""
@@ -1753,8 +1776,8 @@ export function ContentDetailPage() {
 
         {/* Right Column (6 cols): Apply Fixes Bar + Claim Ledger + Rule Findings */}
         <div className="lg:col-span-6 space-y-6">
-          {/* Creator Apply Fixes Bar (Requirement 4 & 6) */}
-          {isCreatorOwner && isLatestReview && !isApproved && (
+          {/* Creator Apply Fixes Bar (hidden when in_review or approved) */}
+          {isCreatorOwner && isLatestReview && !isApproved && !isInReview && (
             <div className="bg-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span
@@ -1916,15 +1939,8 @@ export function ContentDetailPage() {
                                 Fact {finding.fact_code}:
                               </span>
                               {finding.fact_valid_until && (
-                                <span className="text-[11px] font-medium text-slate-500">
-                                  Valid until:{" "}
-                                  {new Date(
-                                    finding.fact_valid_until,
-                                  ).toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })}
+                                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                                  Valid until: {formatDate(finding.fact_valid_until)}
                                 </span>
                               )}
                             </div>
@@ -2154,12 +2170,8 @@ export function ContentDetailPage() {
                         {getActionDisplay(item)}
                       </span>
                       <span className="text-slate-400">•</span>
-                      <span className="text-slate-400 text-[11px] font-mono">
-                        {new Date(item.time).toLocaleDateString()}{" "}
-                        {new Date(item.time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                      <span className="text-slate-400 text-[11px] font-mono whitespace-nowrap">
+                        {formatDate(item.time)}
                       </span>
                     </div>
                     {detailsStr && (

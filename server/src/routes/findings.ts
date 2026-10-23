@@ -116,6 +116,11 @@ findingsRouter.patch("/:id/resolution", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "approved_locked" });
     }
 
+    // Locked if content is in_review
+    if (finding.content_status === "in_review") {
+      return res.status(409).json({ error: "in_review_locked" });
+    }
+
     // Supported claims cannot be resolved
     if (finding.kind === "claim" && finding.verdict === "supported") {
       return res.status(400).json({ error: "nothing_to_fix" });

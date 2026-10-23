@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { formatDate } from "../lib/format.js";
 
 interface ContentItem {
   id: string;
@@ -158,14 +159,8 @@ export function ContentPage() {
                   <td className="px-6 py-4 font-mono text-xs text-slate-500">
                     Rev {item.latest_revision_number}
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-500">
-                    {new Date(item.updated_at).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
+                    {formatDate(item.updated_at)}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Link

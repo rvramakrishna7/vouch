@@ -420,19 +420,14 @@ describe.runIf(hasDb)("Submit, Approval and Audit API (Task S10a)", () => {
     expect(subRes.status).toBe(200);
     expect(subRes.body.content.status).toBe("in_review");
 
-    // Create new revision -> returns to draft
+    // Create new revision while in_review -> rejected with 409 in_review_locked (reverted S10b fix 2d in S10c)
     const revRes = await request(app)
       .post(`/api/contents/${contentId}/revisions`)
       .set("Authorization", `Bearer ${creatorToken}`)
       .send({ mode: "manual", body: "Withdrawing and updating draft text" });
 
-    expect(revRes.status).toBe(201);
-
-    const { rows: cRows } = await pool.query<{ status: string }>(
-      `SELECT status FROM contents WHERE id = $1`,
-      [contentId],
-    );
-    expect(cRows[0].status).toBe("draft");
+    expect(revRes.status).toBe(409);
+    expect(revRes.body.error).toBe("in_review_locked");
   });
 
   it("activity timeline: finding.resolve details includes replacement_text and dismiss_reason", async () => {
@@ -529,5 +524,106 @@ describe.runIf(hasDb)("Submit, Approval and Audit API (Task S10a)", () => {
     const commentItems = actRes.body.activity.filter((a: any) => a.action === "comment");
     expect(commentItems.length).toBe(1);
     expect(commentItems[0].details.body).toBe("Standalone question from team");
+  });
+
+  describe("in_review locked actions (Task S10c)", () => {
+    it("rejects resolving findings, creating revisions, and running reviews when in_review", async () => {
+      const { contentId, revision } = await setupTestContent();
+
+      // Add review and finding
+      const { rows: revRows } = await pool.query<{ id: string }>(
+        `INSERT INTO reviews (organization_id, revision_id, provider, model, ai_status)
+         VALUES ($1, $2, 'test-provider', 'test-model', 'ok')
+         RETURNING id`,
+        [creatorOrgId, revision.id],
+      );
+      const reviewId = revRows[0].id;
+
+      const { rows: fRows } = await pool.query<{ id: string }>(
+        `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+         VALUES ($1, $2, 'term', 'Sample', 0, 6, 'low', 'Rule reason', 'Replacement')
+         RETURNING id`,
+        [creatorOrgId, reviewId],
+      );
+      const findingId = fRows[0].id;
+
+      // Submit content to move to in_review
+      const submitRes = await request(app)
+        .post(`/api/contents/${contentId}/submit`)
+        .set("Authorization", `Bearer ${creatorToken}`);
+      expect(submitRes.status).toBe(200);
+      expect(submitRes.body.content.status).toBe("in_review");
+
+      // 1. Resolve finding while in_review -> 409 in_review_locked
+      const resResolve = await request(app)
+        .patch(`/api/findings/${findingId}/resolution`)
+        .set("Authorization", `Bearer ${creatorToken}`)
+        .send({ action: "accept" });
+      expect(resResolve.status).toBe(409);
+      expect(resResolve.body.error).toBe("in_review_locked");
+
+      // 2. Create manual revision while in_review -> 409 in_review_locked
+      const resManualRev = await request(app)
+        .post(`/api/contents/${contentId}/revisions`)
+        .set("Authorization", `Bearer ${creatorToken}`)
+        .send({ mode: "manual", body: "New body attempting revision" });
+      expect(resManualRev.status).toBe(409);
+      expect(resManualRev.body.error).toBe("in_review_locked");
+
+      // 3. Create apply_fixes revision while in_review -> 409 in_review_locked
+      const resFixesRev = await request(app)
+        .post(`/api/contents/${contentId}/revisions`)
+        .set("Authorization", `Bearer ${creatorToken}`)
+        .send({ mode: "apply_fixes" });
+      expect(resFixesRev.status).toBe(409);
+      expect(resFixesRev.body.error).toBe("in_review_locked");
+
+      // 4. Run review while in_review -> 409 in_review_locked
+      const resReview = await request(app)
+        .post(`/api/contents/${contentId}/reviews`)
+        .set("Authorization", `Bearer ${creatorToken}`);
+      expect(resReview.status).toBe(409);
+      expect(resReview.body.error).toBe("in_review_locked");
+    });
+
+    it("reverts changes_requested to draft on new manual revision (and does not move in_review)", async () => {
+      const { contentId, revision } = await setupTestContent();
+
+      // Add review
+      await pool.query(
+        `INSERT INTO reviews (organization_id, revision_id, provider, model, ai_status)
+         VALUES ($1, $2, 'test-provider', 'test-model', 'ok')`,
+        [creatorOrgId, revision.id],
+      );
+
+      // Submit
+      await request(app)
+        .post(`/api/contents/${contentId}/submit`)
+        .set("Authorization", `Bearer ${creatorToken}`);
+
+      // Request changes
+      await request(app)
+        .post(`/api/contents/${contentId}/decision`)
+        .set("Authorization", `Bearer ${reviewerToken}`)
+        .send({ decision: "request_changes", comment: "Please update the claim" });
+
+      const checkReqRes = await request(app)
+        .get(`/api/contents/${contentId}`)
+        .set("Authorization", `Bearer ${creatorToken}`);
+      expect(checkReqRes.body.status).toBe("changes_requested");
+
+      // Now create revision
+      const revRes = await request(app)
+        .post(`/api/contents/${contentId}/revisions`)
+        .set("Authorization", `Bearer ${creatorToken}`)
+        .send({ mode: "manual", body: "Revised draft body" });
+      expect(revRes.status).toBe(201);
+
+      // Content status should revert to draft
+      const checkDraftRes = await request(app)
+        .get(`/api/contents/${contentId}`)
+        .set("Authorization", `Bearer ${creatorToken}`);
+      expect(checkDraftRes.body.status).toBe("draft");
+    });
   });
 });

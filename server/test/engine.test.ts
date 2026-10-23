@@ -275,7 +275,8 @@ describe.runIf(hasDb)("Review API (POST & GET reviews)", () => {
       `SELECT c.id
        FROM contents c
        JOIN organizations o ON c.organization_id = o.id
-       WHERE o.slug = 'aqualeaf' AND c.title = 'Instagram caption: Flow launch'
+       WHERE o.slug = 'aqualeaf' AND c.title = 'Instagram caption: Flow launch' AND c.status = 'draft'
+       ORDER BY c.created_at ASC
        LIMIT 1`,
     );
     seededContentId = contentRows[0]?.id;

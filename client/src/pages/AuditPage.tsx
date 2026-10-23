@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.js";
 import { apiFetch, ApiError } from "../lib/api.js";
+import { formatDate, formatEntityShort } from "../lib/format.js";
 
 interface AuditEvent {
   id: string;
@@ -92,12 +93,6 @@ export function AuditPage() {
     } finally {
       setLoadingMore(false);
     }
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? "—" : d.toLocaleString();
   };
 
   const formatPayload = (action: string, payload: Record<string, any>) => {
@@ -223,13 +218,13 @@ export function AuditPage() {
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
+          <table className="table-fixed w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Actor</th>
-                <th className="px-4 py-3">Action</th>
-                <th className="px-4 py-3">Entity</th>
+                <th className="w-44 px-4 py-3">Time</th>
+                <th className="w-40 px-4 py-3">Actor</th>
+                <th className="w-44 px-4 py-3">Action</th>
+                <th className="w-48 px-4 py-3">Entity</th>
                 <th className="px-4 py-3">Details</th>
               </tr>
             </thead>
@@ -247,27 +242,35 @@ export function AuditPage() {
                   </td>
                 </tr>
               ) : (
-                events.map((ev) => (
-                  <tr key={ev.id} className="hover:bg-slate-50/60 transition">
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
-                      {formatDate(ev.at)}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
-                      {ev.actor_name && ev.actor_name !== "Unknown" ? ev.actor_name : (ev.actor || "—")}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-800 border border-slate-200">
-                        {ev.action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {ev.entity}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 max-w-md truncate" title={formatPayload(ev.action, ev.payload)}>
-                      {formatPayload(ev.action, ev.payload)}
-                    </td>
-                  </tr>
-                ))
+                events.map((ev) => {
+                  const { short: entityShort, full: entityFull } = formatEntityShort(ev.entity);
+                  const payloadText = formatPayload(ev.action, ev.payload);
+                  const actorDisplay = ev.actor_name && ev.actor_name !== "Unknown" ? ev.actor_name : (ev.actor || "—");
+
+                  return (
+                    <tr key={ev.id} className="hover:bg-slate-50/60 transition">
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
+                        {formatDate(ev.at)}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap truncate" title={actorDisplay}>
+                        {actorDisplay}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                          {ev.action}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600 truncate" title={entityFull}>
+                        <span>{entityShort}</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600" title={payloadText}>
+                        <div className="line-clamp-2 break-words leading-relaxed">
+                          {payloadText}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
