@@ -137,5 +137,6 @@ Put the report at the end of your final message. Do not summarise command output
 | S10a | 7c | Deleted rows from the shared database with an ad-hoc script, without owner approval. |
 | S10b | 7b, 7d | Incomplete mocks; screenshots showed "Unknown", "Invalid Date", "NaN% confidence", raw JSON in the audit table; "Load more" not shown. |
 | S10b.1 | 7e | Live: Submit button misaligned, audit Details overflowed the table, Accept fix / Approve took 5-6 s, three different date formats, creator could still edit while "In review". |
+| S11 | 7a.2, 7d.3 | Wrote screenshots "clean" while the source-quote highlight was on the wrong characters (cut words); marked TEST-001 PASS from unit tests; duplicate check missed the planted CLAIM-01 duplicate on live. |
 
 Each new violation is added here with the task ID.
