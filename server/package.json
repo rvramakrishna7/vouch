@@ -7,7 +7,7 @@
     "dev": "tsx watch src/local.ts",
     "start": "tsx src/local.ts",
     "build": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --fileParallelism false",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "embed:facts": "tsx scripts/embedFacts.ts"

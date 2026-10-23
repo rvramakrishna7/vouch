@@ -73,6 +73,7 @@ findingsRouter.patch("/:id/resolution", async (req: Request, res: Response) => {
       revision_id: string;
       content_id: string;
       content_created_by: string;
+      content_status: string;
     }>(
       `SELECT 
          f.id,
@@ -89,7 +90,8 @@ findingsRouter.patch("/:id/resolution", async (req: Request, res: Response) => {
          f.replacement_text,
          rw.revision_id,
          rv.content_id,
-         c.created_by AS content_created_by
+         c.created_by AS content_created_by,
+         c.status AS content_status
        FROM findings f
        JOIN reviews rw ON rw.id = f.review_id
        JOIN revisions rv ON rv.id = rw.revision_id
@@ -107,6 +109,11 @@ findingsRouter.patch("/:id/resolution", async (req: Request, res: Response) => {
     // Creator owner only: creators cannot access other creators' contents
     if (finding.content_created_by !== req.user!.id) {
       return res.status(404).json({ error: "not_found" });
+    }
+
+    // Locked if content is approved
+    if (finding.content_status === "approved") {
+      return res.status(409).json({ error: "approved_locked" });
     }
 
     // Supported claims cannot be resolved
