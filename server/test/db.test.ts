@@ -49,23 +49,46 @@ describe.runIf(hasDb)("Database schema and invariants", () => {
     );
     expect(aqUsers.c).toBe(3);
 
-    const { rows: [aqRules] } = await pool.query<{ c: number }>(
-      "SELECT count(*)::int as c FROM rules WHERE organization_id = $1",
+    // Assert all 10 seed rules from docs/demo-brand.md exist
+    const { rows: ruleRows } = await pool.query<{ code: string }>(
+      "SELECT code FROM rules WHERE organization_id = $1",
       [aqualeaf.id],
     );
-    expect(aqRules.c).toBe(10);
+    const existingRuleCodes = new Set(ruleRows.map((r) => r.code));
+    const SEED_RULE_CODES = [
+      "CLAIM-01", "CLAIM-02", "CLAIM-03", "CLAIM-04",
+      "TONE-01", "TONE-02",
+      "TERM-01", "TERM-02",
+      "ACC-01", "ACC-02",
+    ];
+    for (const code of SEED_RULE_CODES) {
+      expect(existingRuleCodes.has(code), `Expected seed rule ${code} to exist`).toBe(true);
+    }
 
-    const { rows: [aqFacts] } = await pool.query<{ c: number }>(
-      "SELECT count(*)::int as c FROM facts WHERE organization_id = $1",
+    // Assert all 8 seed facts from docs/demo-brand.md exist
+    const { rows: factRows } = await pool.query<{ code: string }>(
+      "SELECT code FROM facts WHERE organization_id = $1",
       [aqualeaf.id],
     );
-    expect(aqFacts.c).toBe(8);
+    const existingFactCodes = new Set(factRows.map((f) => f.code));
+    const SEED_FACT_CODES = ["F-01", "F-07", "F-12", "F-15", "F-18", "F-20", "F-03", "F-09"];
+    for (const code of SEED_FACT_CODES) {
+      expect(existingFactCodes.has(code), `Expected seed fact ${code} to exist`).toBe(true);
+    }
 
-    const { rows: [aqTerms] } = await pool.query<{ c: number }>(
-      "SELECT count(*)::int as c FROM terms WHERE organization_id = $1",
+    // Assert all 9 seed terms from docs/demo-brand.md exist
+    const { rows: termRows } = await pool.query<{ term: string }>(
+      "SELECT term FROM terms WHERE organization_id = $1",
       [aqualeaf.id],
     );
-    expect(aqTerms.c).toBe(9);
+    const existingTerms = new Set(termRows.map((t) => t.term));
+    const SEED_TERMS = [
+      "No.1", "best in India", "100% natural", "guaranteed", "chemical-free",
+      "eco-friendly", "sustainable", "metal flask", "Aqualeaf",
+    ];
+    for (const term of SEED_TERMS) {
+      expect(existingTerms.has(term), `Expected seed term ${term} to exist`).toBe(true);
+    }
 
     const { rows: [aqContents] } = await pool.query<{ c: number }>(
       "SELECT count(*)::int as c FROM contents WHERE organization_id = $1 AND title = 'Instagram caption: Flow launch'",
