@@ -248,6 +248,27 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
   - `GET /api/contents/00d76e9e-ecc2-4024-957f-81a4eb94aefd/activity`: 8 events returned in exact order.
   - `GET /api/audit?limit=5`: verified live returning real user names ("Neha Iyer", "Priya Sharma") with zero "System" entries for real users. Compound cursor pagination verified without overlap.
 
+- Reviewer approval workflow, override, activity timeline, and audit log (S10a, S10b, S10b.1, S10c) completed, polished, and live:
+  - Header actions: "Submit for review" and "Run Vouch review" in ONE action row, sharing exact height (`h-10`), padding, and baseline alignment. Helper text ("Run Vouch review on the latest revision first") positioned below the row, right-aligned in small grey text (`text-slate-500`), never shifting button positions.
+  - Creator locked while in review:
+    - Client UI: Hides all resolve actions (Accept fix, Edit, Dismiss, Change), hides manual editing and preview changes, hides Submit and Run review. Displays a neutral status banner: "Submitted for review. Waiting for a reviewer."
+    - Server API: Rejects resolving findings, creating revisions (manual or apply_fixes), and running reviews when content status is `in_review` with `409 { error: "in_review_locked" }`. Reverted S10b fix 2d (revisions no longer move `in_review` -> `draft`; preserves `changes_requested` -> `draft`).
+  - Speed budget (AGENTS.md 7e.4):
+    - UI updates instantly from write responses (state mutated immediately); non-critical secondary queries (`fetchActivity`) fire in the background asynchronously without blocking UI updates.
+    - Verified in Playwright E2E with a 3-second delayed activity route: badge and approved banner updates display within 1s.
+    - Live server API write latency on Vercel deployment: `PATCH /api/findings/:id/resolution` takes ~68-84ms (db: ~4-20ms); `POST /api/contents/:id/decision` takes ~72-77ms (db: ~14-16ms) — well under the 1.5s budget.
+  - Audit page polish:
+    - Fixed table layout (`table-fixed w-full`) with explicit column widths. No horizontal scrollbar at 1280px and 1440px viewport widths.
+    - Long details wrap cleanly and clamp to 2 lines (`line-clamp-2 break-words`) with the complete text preserved in a `title` tooltip.
+    - Entity identifiers shortened (e.g. `content · fd4ebc26`) with full entity identifier in `title` tooltip.
+  - Uniform date formatting (AGENTS.md 7e.3):
+    - Shared date helper `client/src/lib/format.ts` (`formatDate`) used universally across content pages, review lists, audit table, activity timelines, and banners (format: `23 Oct 2026, 11:08`).
+  - Playwright E2E:
+    - 3/3 tests passing headless (`resolve.spec.ts` + `approval.spec.ts`).
+    - Longest realistic mock fixtures tested (long titles, long comments, long override reasons, full UUIDs).
+    - Viewport width layout assertions (`scrollWidth <= clientWidth`) checked at 1280px and 1440px.
+    - All 10 step screenshots visually inspected.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
