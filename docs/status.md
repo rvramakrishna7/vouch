@@ -269,22 +269,27 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - Viewport width layout assertions (`scrollWidth <= clientWidth`) checked at 1280px and 1440px.
     - All 10 step screenshots visually inspected.
 
-- Guideline import experience (S11) completed, verified, and live:
+- Guideline import experience (S11 & S11.1) completed, verified, and live:
   - Fictional Aqualeaf Brand Guideline document created (`docs/demo-guideline.md`, 331 words) covering claims, tone, terminology, and accessibility directives, including duplicate directives.
   - Server API (`/api/guidelines`):
-    - `POST /api/guidelines/draft`: brand_manager only (403 for others). Accepts JSON `{text}` (50..20,000 chars) or multipart DOCX file. AI extracts candidate rules with `temperature: 0` and prompt-injection guard. Code validates that every source quote appears verbatim in the guideline text (drops hallucinated quotes into `rejected`). Code assigns the next free rule code per category (e.g. `CLAIM-05`). On-the-fly embedding duplicate check flags candidate rules matching existing rules (cosine similarity >= 0.85). Nothing is saved to DB.
+    - `POST /api/guidelines/draft`: brand_manager only (403 for others). Accepts JSON `{text}` (50..20,000 chars) or multipart DOCX file. AI extracts candidate rules with `temperature: 0` and prompt-injection guard.
+    - S11.1 Highlight fix: server normalizes source text (`\r\n` -> `\n`, smart quotes normalized) and returns `source_text` along with exact character offsets. Slicing `source_text.slice(source_start, source_end)` matches `source_quote` verbatim.
+    - S11.1 Hybrid duplicate detection: Prompt provides existing active rules. LLM proposes `duplicate_of`. Code validates LLM proposals with cosine similarity >= 0.70 threshold. In addition, code marks any candidate with cosine similarity >= 0.85 as duplicate regardless of LLM.
+    - S11.1 Speed & cache: In-memory rule embedding cache per org keyed by `(rule_id, version)`. Embeds uncached rules + drafts in a SINGLE batch `embed` call.
     - `POST /api/guidelines/apply`: brand_manager only. Re-checks that rule codes are still free in a transaction (409 `code_taken`), batch-inserts approved rules, and records append-only audit event (`rules.import`).
   - Client UI (`/brand-kit` Rules tab):
     - "Import from guideline" button visible to Brand Manager.
     - Modal with guideline textarea, live character counter, "Use sample guideline" button, DOCX file upload, and "Draft rules" button with spinner.
-    - Review & Approval view: card per draft with checkbox (checked by default, unchecked if duplicate), category select, severity select, editable rule statement, source quote verified in text with highlighted context excerpt, and amber "Possible duplicate of CLAIM-01" badge.
+    - S11.1 Sentence case labels: "Import rules from guideline", "Review and approve".
+    - S11.1 Exact highlights & tooltips: Context excerpt rendered strictly from `source_text` + offsets with clean word boundary margins (`\s+`). Mark text matches quote exactly. Amber duplicate badge features hover tooltip with matched rule's text statement.
     - Footer with selection counter and "Add N rules" button. Refreshing rules list displays newly added rules with success banner. Plain-language error messages on AI failure.
   - Test suites:
-    - Server: 10 unit tests passing in `server/test/guidelines.test.ts` (12 test files, 95 tests total across server).
+    - Server: 12 unit tests passing in `server/test/guidelines.test.ts` (12 test files, 97 tests total across server).
     - Playwright E2E: 5/5 tests passing headless across `approval.spec.ts`, `guideline.spec.ts`, and `resolve.spec.ts`. All step screenshots visually inspected.
-  - Live AI benchmarking:
+  - Live AI benchmarking (S11.1):
     - 3 live runs of `POST /api/guidelines/draft` against `https://vouch-ten-iota.vercel.app` on `docs/demo-guideline.md`.
-    - 10/10 rules extracted consistently, 0 rejected quotes, AI latency ~2.0s-2.4s. Duplicates detected accurately via embeddings. Zero writes performed on live DB.
+    - 100% of drafts matched `source_text.slice(start, end) === source_quote`.
+    - Every run detected duplicates: Superlatives -> `CLAIM-01`, Numbers/durations -> `CLAIM-03`, Trademark spelling -> `TERM-01`. Zero writes on live DB.
 
 Verified row counts:
 - schema_migrations: 4
