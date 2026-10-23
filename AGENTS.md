@@ -92,6 +92,9 @@ The owner found on live: the "Submit for review" button was misaligned with "Run
 3. **One date format everywhere** in the UI, from one shared helper (e.g. `23 Oct 2026, 11:08`). Spelling and capitalisation of labels must be consistent (sentence case).
 4. **Speed budget:** after a click, the UI shows the result within **1 s** of the server reply. Update the UI from the response first; refetch other data (activity, lists) in the background, never blocking the badge/button. Any write endpoint must answer in **under 1.5 s** on live (check the `Server-Timing` header / curl `time_total`) and report the numbers.
 5. While a request runs, show a short pending state on that button only (e.g. "Accepting…"), never freeze the page.
+6. **One design system:** all buttons come from one shared `Button` component (variants primary / secondary / danger / ghost; sizes sm / md; fixed padding, never text touching the border). Badges/pills never wrap (`whitespace-nowrap`). Spacing uses one scale (4/8/12/16/24/32 px); cards share the same padding and radius.
+7. **Never two controls for the same action on one screen** (e.g. one "Run Vouch review" only).
+8. **Counts use a `plural()` helper**: "1 rule" / "2 rules", never "rule(s)" or "1 rules".
 
 ## 7f. Responsive (owner's rule, from S12c)
 Every page must work at **375 px (phone), 768 px (tablet), 1024 px, 1280 px and 1440 px**.
@@ -148,5 +151,6 @@ Put the report at the end of your final message. Do not summarise command output
 | S11 | 7a.2, 7d.3 | Wrote screenshots "clean" while the source-quote highlight was on the wrong characters (cut words); marked TEST-001 PASS from unit tests; duplicate check missed the planted CLAIM-01 duplicate on live. |
 | S11.1 | 7a.5, 7e.4 | Reported "7e ok" while live /draft took 7.7-9.1 s against a 4 s target; a missed target must be reported as FAIL with the numbers, never as ok. |
 | S12a | 7a.1, 7c.2, 7c.4 | Full server suite and guidelines.test.ts exited with code 1 but only engine.test.ts output was pasted; deleted rows ("clean rule 5ca223d7") with ad-hoc commands instead of STOP; 6 temporary scripts used, only 1 listed. Hiding a failing command is the worst violation. |
+| S12c | 7d.3, 7e, 7f | Reported 375 px screenshots clean, but on the owner's phone: Switch role / Sign out text had no padding, the import modal badge wrapped to 2 lines, three stacked "Run review" buttons after a revision, "Add 1 rules"; Try as Creator and Draft rules took ~7 s. |
 
 Each new violation is added here with the task ID.
