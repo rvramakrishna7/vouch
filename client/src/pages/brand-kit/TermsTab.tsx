@@ -164,7 +164,7 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
           Controlled brand vocabulary: banned terms that violate guidelines, regulated terms requiring explicit substantiation, and preferred terms.
         </p>
@@ -324,7 +324,7 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
           <div className="p-8 text-center text-sm text-slate-500">No brand terms registered yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm divide-y divide-slate-200">
+            <table className="stack-table w-full text-left text-sm divide-y divide-slate-200">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Term / Phrase</th>
@@ -336,17 +336,17 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
               <tbody className="divide-y divide-slate-100">
                 {terms.map((term) => (
                   <tr key={term.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">
+                    <td data-label="Term" className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">
                       {term.term}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td data-label="Type" className="px-4 py-3 whitespace-nowrap">
                       {typeBadge(term.type)}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 text-xs">
+                    <td data-label="Guidance" className="px-4 py-3 text-slate-700 text-xs">
                       {term.replacement || "—"}
                     </td>
                     {isBrandManager && (
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap">
                         {confirmDeleteId === term.id ? (
                           <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 px-2 py-1 rounded text-xs">
                             <span className="text-red-700 font-medium">Are you sure?</span>

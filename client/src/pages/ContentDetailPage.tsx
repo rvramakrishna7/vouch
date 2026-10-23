@@ -936,7 +936,7 @@ export function ContentDetailPage() {
               type="button"
               onClick={() => handleHighlightClick(f.id)}
               title={`Click to view finding: ${f.reason}`}
-              className={`inline font-sans cursor-pointer rounded px-0.5 transition-all text-left ${highlightStyle} ${
+              className={`touch-auto inline font-sans cursor-pointer rounded px-0.5 transition-all text-left ${highlightStyle} ${
                 isSelected ? "ring-2 ring-slate-900 ring-offset-1 font-semibold" : ""
               }`}
             >
@@ -1018,16 +1018,16 @@ export function ContentDetailPage() {
     if (activeEditId === finding.id) {
       return (
         <div className="pt-2 border-t border-slate-100 space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Replacement Text
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
               value={editInputText}
               onChange={(e) => setEditInputText(e.target.value)}
               placeholder="Enter replacement text..."
-              className="flex-1 text-xs font-mono px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="flex-1 min-w-[10rem] text-xs font-mono px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               autoFocus
             />
             <button
@@ -1058,16 +1058,16 @@ export function ContentDetailPage() {
       const isValid = dismissInputReason.trim().length >= 5;
       return (
         <div className="pt-2 border-t border-slate-100 space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Reason for Dismissing (min 5 characters)
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
               value={dismissInputReason}
               onChange={(e) => setDismissInputReason(e.target.value)}
               placeholder="E.g. Approved brand exception..."
-              className="flex-1 text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="flex-1 min-w-[10rem] text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               autoFocus
             />
             <button
@@ -1138,7 +1138,7 @@ export function ContentDetailPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 [overflow-wrap:anywhere]">
       {/* Top Breadcrumb & Action banner */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -1163,14 +1163,14 @@ export function ContentDetailPage() {
         </div>
 
         {/* Run Vouch review and Submit buttons in ONE row, with hint below */}
-        <div className="shrink-0 flex flex-col items-end gap-1.5 self-start sm:self-auto">
-          <div className="flex items-center gap-3">
+        <div className="w-full sm:w-auto shrink-0 flex flex-col items-stretch sm:items-end gap-1.5 self-start sm:self-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
             {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (
               <button
                 type="button"
                 disabled={submitting || !isLatestReview}
                 onClick={handleSubmitForReview}
-                className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                className="h-11 sm:h-10 w-full sm:w-auto px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
               >
                 {submitting ? "Submitting…" : "Submit for review"}
               </button>
@@ -1181,7 +1181,7 @@ export function ContentDetailPage() {
                 type="button"
                 disabled={loading || reviewRunning || !latestRevision}
                 onClick={handleRunReview}
-                className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                className="h-11 sm:h-10 w-full sm:w-auto px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
               >
                 {reviewRunning ? (
                   <>
@@ -1212,7 +1212,7 @@ export function ContentDetailPage() {
 
           {/* Hint goes below the row, right-aligned, small grey text (never shifts buttons) */}
           {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (!isLatestReview || submitHint) && (
-            <span className="text-[11px] text-slate-500 font-normal whitespace-nowrap">
+            <span className="text-xs text-slate-500 font-normal sm:whitespace-nowrap sm:text-right">
               {submitHint || "Run Vouch review on the latest revision first"}
             </span>
           )}
@@ -1331,7 +1331,7 @@ export function ContentDetailPage() {
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-400">
                   {requestChangesComment.trim().length} / 5 chars min
                 </span>
                 <div className="flex items-center gap-2">
@@ -1618,11 +1618,11 @@ export function ContentDetailPage() {
       </div>
 
       {/* Main Review Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* Left Column (6 cols): Latest Revision Body + Revision History */}
-        <div className="lg:col-span-6 space-y-6">
+        <div className="contents lg:block lg:col-span-6 lg:space-y-6">
           {/* Draft Body */}
-          <div className="space-y-4">
+          <div className="order-1 lg:order-none space-y-4 min-w-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold text-slate-900">
@@ -1642,7 +1642,7 @@ export function ContentDetailPage() {
               )}
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-8 shadow-sm">
               {loading ? (
                 <div className="space-y-3 animate-pulse">
                   <div className="h-4 bg-slate-200 rounded w-full" />
@@ -1669,7 +1669,7 @@ export function ContentDetailPage() {
 
           {/* Interactive Revision History (Requirement 7) */}
           {content && content.revisions && content.revisions.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="order-5 lg:order-none min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1706,29 +1706,29 @@ export function ContentDetailPage() {
                             curr === rev.n ? null : rev.n,
                           )
                         }
-                        className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 transition cursor-pointer"
+                        className="w-full p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 text-left hover:bg-slate-50 transition cursor-pointer"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-sm text-slate-900">
                             Revision {rev.n}
                           </span>
                           {isLatest && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white">
                               Latest
                             </span>
                           )}
                           {rev.n === 1 && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                               Initial revision
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500 whitespace-nowrap">
+                        <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500">
                           <span>{rev.created_by_name || content?.created_by_name || "Arjun Mehta"}</span>
                           <span>•</span>
                           <span>{formatDate(rev.created_at)}</span>
                           <span
-                            className={`transition-transform text-slate-400 font-bold ${
+                            className={`transition-transform text-slate-400 font-bold ml-auto sm:ml-0 ${
                               isExpanded ? "rotate-180" : ""
                             }`}
                           >
@@ -1741,7 +1741,7 @@ export function ContentDetailPage() {
                         <div className="p-4 pt-0 border-t border-slate-100 space-y-3 mt-2">
                           {rev.n > 1 && prevRev ? (
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                                 Changes from Revision {prevRev.n}
                               </span>
                               <WordDiff oldText={prevRev.body} newText={rev.body} />
@@ -1756,7 +1756,7 @@ export function ContentDetailPage() {
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                                 Initial Revision Text
                               </span>
                               <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800">
@@ -1775,10 +1775,10 @@ export function ContentDetailPage() {
         </div>
 
         {/* Right Column (6 cols): Apply Fixes Bar + Claim Ledger + Rule Findings */}
-        <div className="lg:col-span-6 space-y-6">
+        <div className="contents lg:block lg:col-span-6 lg:space-y-6">
           {/* Creator Apply Fixes Bar (hidden when in_review or approved) */}
           {isCreatorOwner && isLatestReview && !isApproved && !isInReview && (
-            <div className="bg-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="order-2 lg:order-none bg-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span
                   className={`w-2.5 h-2.5 rounded-full shrink-0 ${
@@ -1814,7 +1814,7 @@ export function ContentDetailPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:flex sm:items-center gap-2 sm:shrink-0">
                 <button
                   type="button"
                   onClick={handleOpenManualEdit}
@@ -1842,7 +1842,7 @@ export function ContentDetailPage() {
           )}
 
           {/* SECTION 1: Claim Ledger */}
-          <div className="space-y-3">
+          <div className="order-3 lg:order-none min-w-0 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1915,7 +1915,7 @@ export function ContentDetailPage() {
                       {/* Top: Quoted claim + Verdict chip */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-0.5">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                          <span className="text-xs uppercase font-bold tracking-wider text-slate-400 block">
                             Quoted Claim
                           </span>
                           <span className="font-mono text-sm font-bold text-slate-900">
@@ -1939,7 +1939,7 @@ export function ContentDetailPage() {
                                 Fact {finding.fact_code}:
                               </span>
                               {finding.fact_valid_until && (
-                                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">
                                   Valid until: {formatDate(finding.fact_valid_until)}
                                 </span>
                               )}
@@ -1986,7 +1986,7 @@ export function ContentDetailPage() {
                 })}
 
                 {/* Verdict Legend */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1.5 leading-relaxed">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1.5 leading-relaxed">
                   <span className="font-bold text-slate-700">Verdicts:</span>
                   <span className="inline-flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -2014,7 +2014,7 @@ export function ContentDetailPage() {
           </div>
 
           {/* SECTION 2: Rule Guidelines & Other Findings */}
-          <div className="space-y-3 pt-4 border-t border-slate-200">
+          <div className="order-4 lg:order-none min-w-0 space-y-3 pt-4 border-t border-slate-200">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -2086,7 +2086,7 @@ export function ContentDetailPage() {
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-                        <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">
+                        <span className="text-xs text-slate-400 block uppercase font-bold tracking-wider">
                           Flagged Span
                         </span>
                         <span className="font-mono text-xs font-bold text-slate-900">
@@ -2170,7 +2170,7 @@ export function ContentDetailPage() {
                         {getActionDisplay(item)}
                       </span>
                       <span className="text-slate-400">•</span>
-                      <span className="text-slate-400 text-[11px] font-mono whitespace-nowrap">
+                      <span className="text-slate-400 text-xs font-mono whitespace-nowrap">
                         {formatDate(item.time)}
                       </span>
                     </div>
@@ -2189,9 +2189,9 @@ export function ContentDetailPage() {
 
       {/* Preview Changes Modal (Requirement 4) */}
       {previewModalOpen && previewData && latestRevision && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
+          <div className="bg-white sm:rounded-2xl max-w-2xl w-full shadow-2xl sm:border border-slate-200 overflow-hidden sm:my-8 flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
+            <div className="shrink-0 p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
                   Preview Changes (Revision {nextRevisionN})
@@ -2209,7 +2209,7 @@ export function ContentDetailPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2">
                   Diff Preview
@@ -2240,7 +2240,7 @@ export function ContentDetailPage() {
               )}
             </div>
 
-            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
               <button
                 type="button"
                 disabled={applyingFixes}
@@ -2271,9 +2271,9 @@ export function ContentDetailPage() {
 
       {/* Manual Edit Modal (Requirement 6) */}
       {manualModalOpen && latestRevision && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
+          <div className="bg-white sm:rounded-2xl max-w-2xl w-full shadow-2xl sm:border border-slate-200 overflow-hidden sm:my-8 flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
+            <div className="shrink-0 p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
                   Edit Text Manually
@@ -2291,7 +2291,7 @@ export function ContentDetailPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                   Draft Text
@@ -2313,7 +2313,7 @@ export function ContentDetailPage() {
               </div>
             </div>
 
-            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
               <button
                 type="button"
                 disabled={savingManual}
@@ -2348,9 +2348,9 @@ export function ContentDetailPage() {
 
       {/* Override Reason Dialog */}
       {overrideDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
+          <div className="bg-white sm:rounded-2xl max-w-lg w-full shadow-2xl sm:border border-slate-200 overflow-hidden sm:my-8 flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
+            <div className="shrink-0 p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
                   Approval Requires Override
@@ -2368,7 +2368,7 @@ export function ContentDetailPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
                 <span className="font-bold block">Conditions requiring override:</span>
                 {typeof overrideHighCount === "number" && overrideHighCount > 0 && (
@@ -2391,13 +2391,13 @@ export function ContentDetailPage() {
                   className="w-full text-xs p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
                   autoFocus
                 />
-                <span className="text-[11px] text-slate-400 block text-right">
+                <span className="text-xs text-slate-400 block text-right">
                   {overrideReason.trim().length} / 10 chars min
                 </span>
               </div>
             </div>
 
-            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setOverrideDialogOpen(false)}

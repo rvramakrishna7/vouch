@@ -249,18 +249,18 @@ export function AuditPage() {
         </div>
 
         {/* Action filter dropdown & Hide sign-ins checkbox */}
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-slate-700">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <label className="flex items-center gap-2 min-h-11 md:min-h-0 cursor-pointer select-none text-xs font-medium text-slate-700">
             <input
               type="checkbox"
               checked={hideSignIns}
               onChange={(e) => setHideSignIns(e.target.checked)}
-              className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 cursor-pointer"
+              className="w-5 h-5 md:w-4 md:h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 cursor-pointer"
             />
             <span>Hide sign-ins</span>
           </label>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-w-full">
             <label htmlFor="action-filter" className="text-xs font-medium text-slate-600">
               Filter action:
             </label>
@@ -268,7 +268,7 @@ export function AuditPage() {
               id="action-filter"
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
-              className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="text-xs min-h-11 md:min-h-0 border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
               <option value="">All actions</option>
               {availableActions.map((act) => (
@@ -289,13 +289,13 @@ export function AuditPage() {
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="table-fixed w-full text-left text-xs sm:text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+          <table className="stack-table md:table-fixed w-full text-left text-xs sm:text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-xs">
               <tr>
-                <th className="w-40 px-4 py-3">Time</th>
-                <th className="w-36 px-4 py-3">Actor</th>
-                <th className="w-48 px-4 py-3">Action</th>
-                <th className="w-44 px-4 py-3">Entity</th>
+                <th className="w-32 lg:w-40 px-4 py-3">Time</th>
+                <th className="w-28 lg:w-36 px-4 py-3">Actor</th>
+                <th className="w-36 lg:w-48 px-4 py-3">Action</th>
+                <th className="w-28 lg:w-44 px-4 py-3">Entity</th>
                 <th className="px-4 py-3">Details</th>
               </tr>
             </thead>
@@ -321,26 +321,26 @@ export function AuditPage() {
 
                   return (
                     <tr key={ev.id} className="hover:bg-slate-50/60 transition">
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
+                      <td data-label="Time" className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
                         {formatDate(ev.at)}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap truncate" title={actorDisplay}>
+                      <td data-label="Actor" className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap truncate" title={actorDisplay}>
                         {actorDisplay}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-0.5 max-w-[180px]">
+                      <td data-label="Action" className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5 max-w-[130px] lg:max-w-[180px]">
                           <span className="font-semibold text-xs text-slate-900 truncate" title={readableAction}>
                             {readableAction}
                           </span>
-                          <span className="font-mono text-[10px] text-slate-400 truncate" title={ev.action}>
+                          <span className="font-mono text-xs text-slate-400 truncate" title={ev.action}>
                             {ev.action}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600 truncate" title={entityFull}>
+                      <td data-label="Entity" className="px-4 py-3 font-mono text-xs text-slate-600 truncate" title={entityFull}>
                         <span>{entityShort}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600" title={payloadText}>
+                      <td data-label="Details" className="px-4 py-3 text-slate-600" title={payloadText}>
                         <div className="line-clamp-2 break-words leading-relaxed">
                           {payloadText}
                         </div>
@@ -359,7 +359,7 @@ export function AuditPage() {
               type="button"
               disabled={loadingMore}
               onClick={handleLoadMore}
-              className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 shadow-sm transition cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 min-h-11 md:min-h-0 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 shadow-sm transition cursor-pointer disabled:opacity-50"
             >
               {loadingMore ? "Loading more…" : "Load more"}
             </button>

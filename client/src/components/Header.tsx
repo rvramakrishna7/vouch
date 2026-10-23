@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.js";
 
@@ -19,6 +20,7 @@ const ROLE_LABELS: Record<string, { label: string; badgeClass: string }> = {
 export function Header() {
   const { user, organization, logout } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (!user) return null;
 
@@ -28,10 +30,12 @@ export function Header() {
   };
 
   const handleSwitchRole = () => {
+    setMenuOpen(false);
     navigate("/login");
   };
 
   const handleLogout = () => {
+    setMenuOpen(false);
     logout();
     navigate("/login");
   };
@@ -41,6 +45,13 @@ export function Header() {
       isActive
         ? "bg-slate-900 text-white"
         : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+    }`;
+
+  const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center min-h-11 text-base font-medium px-3 rounded-md transition-colors ${
+      isActive
+        ? "bg-slate-900 text-white"
+        : "text-slate-700 hover:bg-slate-100"
     }`;
 
   // Nav configuration per role:
@@ -75,25 +86,33 @@ export function Header() {
     ];
   })();
 
+  const roleBadge = (
+    <span
+      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border whitespace-nowrap ${roleMeta.badgeClass}`}
+    >
+      {roleMeta.label}
+    </span>
+  );
+
   return (
-    <header className="border-b border-slate-200 bg-white">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
+    <header className="border-b border-slate-200 bg-white relative">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-6 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             <span className="text-xl font-bold tracking-tight text-slate-900">
               Vouch
             </span>
             {organization && (
               <>
-                <span className="text-slate-300">/</span>
-                <span className="text-sm font-medium text-slate-600">
+                <span className="text-slate-300 hidden sm:inline">/</span>
+                <span className="text-sm font-medium text-slate-600 hidden sm:inline truncate">
                   {organization.name}
                 </span>
               </>
             )}
           </div>
 
-          <nav className="flex items-center gap-1.5">
+          <nav className="hidden md:flex items-center gap-1.5">
             {navLinks.map((link) => (
               <NavLink key={link.to} to={link.to} className={navLinkClass}>
                 {link.label}
@@ -102,16 +121,12 @@ export function Header() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-900">
+            <span className="text-sm font-medium text-slate-900 whitespace-nowrap">
               {user.name}
             </span>
-            <span
-              className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${roleMeta.badgeClass}`}
-            >
-              {roleMeta.label}
-            </span>
+            {roleBadge}
           </div>
 
           <div className="h-4 w-px bg-slate-200" />
@@ -119,19 +134,77 @@ export function Header() {
           <button
             onClick={handleSwitchRole}
             type="button"
-            className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
+            className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer whitespace-nowrap"
           >
             Switch role
           </button>
           <button
             onClick={handleLogout}
             type="button"
-            className="text-xs font-medium text-red-600 hover:text-red-700 cursor-pointer"
+            className="text-xs font-medium text-red-600 hover:text-red-700 cursor-pointer whitespace-nowrap"
           >
             Sign out
           </button>
         </div>
+
+        <button
+          type="button"
+          aria-label="Menu"
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+          onClick={() => setMenuOpen((o) => !o)}
+          className="md:hidden inline-flex items-center justify-center h-11 px-3 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+        >
+          {menuOpen ? "Hide menu" : "Menu"}
+        </button>
       </div>
+
+      {menuOpen && (
+        <div
+          id="mobile-menu"
+          className="md:hidden absolute left-0 right-0 top-full z-40 border-b border-slate-200 bg-white shadow-lg px-4 py-3 space-y-3"
+        >
+          <nav className="flex flex-col gap-1">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={mobileNavLinkClass}
+                onClick={() => setMenuOpen(false)}
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="border-t border-slate-200 pt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-900 break-words">
+              {user.name}
+            </span>
+            {roleBadge}
+            {organization && (
+              <span className="text-xs text-slate-500 w-full">
+                {organization.name}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleSwitchRole}
+              type="button"
+              className="min-h-11 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              Switch role
+            </button>
+            <button
+              onClick={handleLogout}
+              type="button"
+              className="min-h-11 rounded-md border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
