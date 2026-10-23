@@ -380,7 +380,109 @@ describe.runIf(hasDb)("Submit, Approval and Audit API (Task S10a)", () => {
     }
   });
 
-  it("activity timeline returns ordered items with actor details", async () => {
+  it("audit cursor uses (at, id) compound cursor for pagination", async () => {
+    const page1Res = await request(app)
+      .get("/api/audit?limit=2")
+      .set("Authorization", `Bearer ${brandManagerToken}`);
+
+    expect(page1Res.status).toBe(200);
+    expect(page1Res.body.events.length).toBe(2);
+    expect(page1Res.body.next_cursor).toMatch(/^[0-9T:.Z-]+?\|[0-9a-f-]{36}$/);
+
+    const nextCursor = page1Res.body.next_cursor;
+    const page2Res = await request(app)
+      .get(`/api/audit?limit=2&before=${encodeURIComponent(nextCursor)}`)
+      .set("Authorization", `Bearer ${brandManagerToken}`);
+
+    expect(page2Res.status).toBe(200);
+    expect(Array.isArray(page2Res.body.events)).toBe(true);
+
+    // Verify events on page 2 are older than page 1 cursor
+    const [cursorAt] = nextCursor.split("|");
+    const cursorTime = new Date(cursorAt).getTime();
+    for (const ev of page2Res.body.events) {
+      expect(new Date(ev.at).getTime()).toBeLessThanOrEqual(cursorTime);
+    }
+  });
+
+  it("creating a revision while status is in_review returns status to draft (creator withdraws)", async () => {
+    const { contentId, revision } = await setupTestContent();
+    await pool.query(
+      `INSERT INTO reviews (organization_id, revision_id, provider, model, ai_status)
+       VALUES ($1, $2, 'test-provider', 'test-model', 'ok')`,
+      [creatorOrgId, revision.id],
+    );
+
+    // Submit -> in_review
+    const subRes = await request(app)
+      .post(`/api/contents/${contentId}/submit`)
+      .set("Authorization", `Bearer ${creatorToken}`);
+    expect(subRes.status).toBe(200);
+    expect(subRes.body.content.status).toBe("in_review");
+
+    // Create new revision -> returns to draft
+    const revRes = await request(app)
+      .post(`/api/contents/${contentId}/revisions`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ mode: "manual", body: "Withdrawing and updating draft text" });
+
+    expect(revRes.status).toBe(201);
+
+    const { rows: cRows } = await pool.query<{ status: string }>(
+      `SELECT status FROM contents WHERE id = $1`,
+      [contentId],
+    );
+    expect(cRows[0].status).toBe("draft");
+  });
+
+  it("activity timeline: finding.resolve details includes replacement_text and dismiss_reason", async () => {
+    const { contentId, revision } = await setupTestContent("Sample text for test");
+    const { rows: rwRows } = await pool.query<{ id: string }>(
+      `INSERT INTO reviews (organization_id, revision_id, provider, model, ai_status)
+       VALUES ($1, $2, 'test-provider', 'test-model', 'ok')
+       RETURNING id`,
+      [creatorOrgId, revision.id],
+    );
+    const reviewId = rwRows[0].id;
+
+    const { rows: fRows } = await pool.query<{ id: string }>(
+      `INSERT INTO findings (organization_id, review_id, kind, span_text, start_offset, end_offset, severity, reason, suggested_fix)
+       VALUES ($1, $2, 'term', 'Sample', 0, 6, 'low', 'Rule reason', 'Replacement')
+       RETURNING id`,
+      [creatorOrgId, reviewId],
+    );
+    const findingId = fRows[0].id;
+
+    // Edit finding
+    await request(app)
+      .patch(`/api/findings/${findingId}/resolution`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ action: "edit", text: "Custom replacement text" });
+
+    // Dismiss finding
+    await request(app)
+      .patch(`/api/findings/${findingId}/resolution`)
+      .set("Authorization", `Bearer ${creatorToken}`)
+      .send({ action: "dismiss", reason: "Not applicable for this context" });
+
+    const actRes = await request(app)
+      .get(`/api/contents/${contentId}/activity`)
+      .set("Authorization", `Bearer ${creatorToken}`);
+
+    expect(actRes.status).toBe(200);
+    const resolveEvents = actRes.body.activity.filter((a: any) => a.action === "finding.resolve");
+    expect(resolveEvents.length).toBe(2);
+
+    const editEv = resolveEvents.find((e: any) => e.details.action === "edit");
+    expect(editEv).toBeDefined();
+    expect(editEv.details.replacement_text).toBe("Custom replacement text");
+
+    const dismissEv = resolveEvents.find((e: any) => e.details.action === "dismiss");
+    expect(dismissEv).toBeDefined();
+    expect(dismissEv.details.dismiss_reason).toBe("Not applicable for this context");
+  });
+
+  it("activity timeline: deduplicates comment covered by decision and keeps standalone comments", async () => {
     const { contentId, revision } = await setupTestContent();
 
     // Add review
@@ -401,24 +503,31 @@ describe.runIf(hasDb)("Submit, Approval and Audit API (Task S10a)", () => {
       .set("Authorization", `Bearer ${reviewerToken}`)
       .send({ decision: "request_changes", comment: "Need tighter copy" });
 
+    // Insert a separate standalone comment directly into comments
+    await pool.query(
+      `INSERT INTO comments (organization_id, content_id, revision_id, user_id, body)
+       VALUES ($1, $2, $3, $4, 'Standalone question from team')`,
+      [creatorOrgId, contentId, revision.id, creatorUserId],
+    );
+
     // Creator checks activity
     const actRes = await request(app)
       .get(`/api/contents/${contentId}/activity`)
       .set("Authorization", `Bearer ${creatorToken}`);
 
     expect(actRes.status).toBe(200);
-    expect(Array.isArray(actRes.body.activity)).toBe(true);
-    expect(actRes.body.activity.length).toBeGreaterThanOrEqual(3);
-
     const actions = actRes.body.activity.map((a: any) => a.action);
     expect(actions).toContain("content.submit");
     expect(actions).toContain("content.request_changes");
     expect(actions).toContain("comment");
 
-    // Check actor_name
-    const commentItem = actRes.body.activity.find((a: any) => a.action === "comment");
-    expect(commentItem).toBeDefined();
-    expect(commentItem.actor_name).toBeTruthy();
-    expect(commentItem.details.body).toBe("Need tighter copy");
+    // The decision event has the decision comment
+    const reqChanges = actRes.body.activity.find((a: any) => a.action === "content.request_changes");
+    expect(reqChanges.details.comment).toBe("Need tighter copy");
+
+    // The comments array only has the standalone comment (the decision comment was deduplicated)
+    const commentItems = actRes.body.activity.filter((a: any) => a.action === "comment");
+    expect(commentItems.length).toBe(1);
+    expect(commentItems[0].details.body).toBe("Standalone question from team");
   });
 });

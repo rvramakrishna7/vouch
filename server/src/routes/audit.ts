@@ -30,10 +30,23 @@ auditRouter.get("/", async (req: Request, res: Response) => {
     const params: unknown[] = [orgId];
 
     if (before) {
-      const beforeDate = new Date(before);
-      if (!isNaN(beforeDate.getTime())) {
-        params.push(beforeDate.toISOString());
-        conditions.push(`ae.at < $${params.length}`);
+      const parts = before.split("|");
+      if (parts.length === 2) {
+        const [beforeIso, beforeId] = parts;
+        const beforeDate = new Date(beforeIso);
+        if (!isNaN(beforeDate.getTime())) {
+          params.push(beforeDate.toISOString());
+          const atParam = `$${params.length}`;
+          params.push(beforeId.trim());
+          const idParam = `$${params.length}`;
+          conditions.push(`(ae.at, ae.id) < (${atParam}, ${idParam}::uuid)`);
+        }
+      } else {
+        const beforeDate = new Date(before);
+        if (!isNaN(beforeDate.getTime())) {
+          params.push(beforeDate.toISOString());
+          conditions.push(`ae.at < $${params.length}`);
+        }
       }
     }
 
@@ -73,7 +86,10 @@ auditRouter.get("/", async (req: Request, res: Response) => {
       at: string;
     }>(query, params);
 
-    const nextCursor = rows.length === limit ? rows[rows.length - 1].at : null;
+    const nextCursor =
+      rows.length === limit
+        ? `${new Date(rows[rows.length - 1].at).toISOString()}|${rows[rows.length - 1].id}`
+        : null;
 
     return res.json({
       events: rows,
