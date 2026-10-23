@@ -307,6 +307,15 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
       - `server/test/guidelines.test.ts`: computes expected next codes dynamically from database.
     - Verified with two consecutive runs of the full server test suite (`npm test --prefix server`): both runs passed 100% (12/12 files, 98/98 tests), with exact rule count invariant verified before Run 1 (13), after Run 1 (13), and after Run 2 (13). Zero database mutation outside test-scoped cleanup.
     - Client build and full Playwright E2E suite passed 5/5.
+  - Responsive app design (S12c):
+    - Implemented mobile-first responsive layout across all 5 standard viewport widths: 375px (phone), 768px (tablet), 1024px, 1280px, and 1440px.
+    - Navigation Header collapses to an accessible mobile menu drawer below 768px (`md`), providing navigation links, username, role badge, Switch role, and Sign out.
+    - Content detail page: two-column layout on desktop (`lg:col-span-6`), cleanly stacked on mobile/tablet (`Draft Body` -> `Fixes Action Bar` -> `Claim Ledger` -> `Rule Findings` -> `Revision History` -> `Activity Timeline`).
+    - Tables (`ContentPage`, `ReviewsPage`, `RulesTab`, `FactsTab`, `TermsTab`, `AuditPage`) transform into responsive stacked card views below 768px with individual `data-label` cell headers.
+    - Modals (`PreviewChangesDialog`, `ManualEditModal`, `OverrideDialog`, `ImportGuidelineModal`) render full-screen on mobile with sticky bottom footers for primary action buttons.
+    - Strict compliance with AGENTS.md rule 7f: zero horizontal page overflow (`scrollWidth <= clientWidth`), touch targets >= 40px, font sizes >= 12px, clean text assertions on all views.
+    - Comprehensive E2E test suite `client/e2e/responsive.spec.ts` (7/7 tests passed) with full-page screenshots captured across all 5 widths in `client/e2e/screenshots/`.
+    - Zero regressions across existing E2E suites: `approval.spec.ts`, `guideline.spec.ts`, and `resolve.spec.ts` all passed (5/5).
 
 Verified row counts:
 - schema_migrations: 4
@@ -338,6 +347,8 @@ Verified row counts:
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history), S9b.1 (fix resolve UI "open" status & 8/8 Playwright e2e checks), S9c (UI polish, HTML entity cleanup, stale-review highlights fix) |
 | S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Done: S10a (submit, approval, lock rules, activity & audit API) and S10b (approval UI, override dialog, activity timeline, /audit page, E2E tests) |
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Done: S11 (server pipeline & apply API, Brand Kit import modal, live 3-run benchmark, 5/5 E2E tests) |
+| S12a | Final polish, test isolation & cleanup | 24 Oct | Done: S12a.2 (test isolation across runs, zero ad-hoc mutation, 100% server suite pass) |
+| S12c | Responsive design (phone, tablet, desktop) | 24 Oct | Done: S12c (responsive layouts, e2e suite 7/7, zero regressions across existing suites 5/5) |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Next |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
