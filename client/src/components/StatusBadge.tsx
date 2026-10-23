@@ -8,11 +8,11 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
     className: "bg-slate-100 text-slate-700 border-slate-200",
   },
   in_review: {
-    label: "In Review",
+    label: "In review",
     className: "bg-blue-100 text-blue-700 border-blue-200",
   },
   changes_requested: {
-    label: "Changes Requested",
+    label: "Changes requested",
     className: "bg-amber-100 text-amber-800 border-amber-200",
   },
   approved: {

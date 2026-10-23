@@ -657,7 +657,7 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
         await client.query(
           `UPDATE contents
-           SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
+           SET status = CASE WHEN status IN ('changes_requested', 'in_review') THEN 'draft' ELSE status END,
                updated_at = now()
            WHERE id = $1 AND organization_id = $2`,
           [id, orgId],
@@ -820,7 +820,7 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
       await client.query(
         `UPDATE contents
-         SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
+         SET status = CASE WHEN status IN ('changes_requested', 'in_review') THEN 'draft' ELSE status END,
              updated_at = now()
          WHERE id = $1 AND organization_id = $2`,
         [id, orgId],
@@ -1254,8 +1254,8 @@ contentsRouter.get("/:id/activity", async (req: Request, res: Response) => {
           details = {
             action: p.action,
             finding_id: p.finding_id,
-            reason: p.reason,
-            text: p.text,
+            replacement_text: p.replacement_text ?? p.text ?? null,
+            dismiss_reason: p.dismiss_reason ?? p.reason ?? null,
           };
           break;
         case "content.submit":
@@ -1292,17 +1292,28 @@ contentsRouter.get("/:id/activity", async (req: Request, res: Response) => {
     }
 
     for (const c of commentRows) {
-      timeline.push({
-        id: c.id,
-        action: "comment",
-        actor: c.user_id,
-        actor_name: c.actor_name,
-        time: c.created_at,
-        details: {
-          body: c.body,
-          revision_id: c.revision_id,
-        },
-      });
+      // Do not return a separate "comment" item when the same comment is already in a content.request_changes/approve event (same revision_id + body)
+      const isCoveredByDecision = auditRows.some(
+        (ae) =>
+          (ae.action === "content.request_changes" || ae.action === "content.approve") &&
+          ae.payload?.revision_id === c.revision_id &&
+          typeof ae.payload?.comment === "string" &&
+          ae.payload.comment.trim() === c.body.trim(),
+      );
+
+      if (!isCoveredByDecision) {
+        timeline.push({
+          id: c.id,
+          action: "comment",
+          actor: c.user_id,
+          actor_name: c.actor_name,
+          time: c.created_at,
+          details: {
+            body: c.body,
+            revision_id: c.revision_id,
+          },
+        });
+      }
     }
 
     // Sort timeline oldest first (time ASC)

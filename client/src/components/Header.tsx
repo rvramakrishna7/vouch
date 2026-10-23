@@ -43,10 +43,10 @@ export function Header() {
         : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
     }`;
 
-  // Nav configuration per role (Requirement 6):
+  // Nav configuration per role:
   // Creator: Content, Brand Kit
-  // Reviewer: Reviews, Brand Kit
-  // Brand Manager: Brand Kit, Reviews (read)
+  // Reviewer: Reviews, Brand Kit, Audit log
+  // Brand Manager: Brand Kit, Reviews (read), Audit log
   const navLinks = (() => {
     if (user.role === "creator") {
       return [
@@ -58,12 +58,14 @@ export function Header() {
       return [
         { to: "/reviews", label: "Reviews" },
         { to: "/brand-kit", label: "Brand Kit" },
+        { to: "/audit", label: "Audit log" },
       ];
     }
     if (user.role === "brand_manager") {
       return [
         { to: "/brand-kit", label: "Brand Kit" },
         { to: "/reviews", label: "Reviews (read)" },
+        { to: "/audit", label: "Audit log" },
       ];
     }
     return [

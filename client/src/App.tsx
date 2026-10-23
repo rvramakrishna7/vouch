@@ -7,6 +7,7 @@ import { NewContentPage } from "./pages/NewContentPage.js";
 import { ContentDetailPage } from "./pages/ContentDetailPage.js";
 import { ReviewsPage } from "./pages/ReviewsPage.js";
 import { BrandKitPage } from "./pages/BrandKitPage.js";
+import { AuditPage } from "./pages/AuditPage.js";
 
 function CatchAllRedirect() {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ function App() {
             <Route path="/content/:id" element={<ContentDetailPage />} />
             <Route path="/reviews" element={<ReviewsPage />} />
             <Route path="/brand-kit" element={<BrandKitPage />} />
+            <Route path="/audit" element={<AuditPage />} />
           </Route>
           <Route path="*" element={<CatchAllRedirect />} />
         </Routes>

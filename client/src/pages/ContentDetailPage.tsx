@@ -69,6 +69,15 @@ interface Finding {
   created_at: string;
 }
 
+interface ActivityItem {
+  id: string;
+  action: string;
+  actor: string;
+  actor_name: string;
+  time: string;
+  details: Record<string, any>;
+}
+
 const KIND_LABELS: Record<string, { label: string; className: string }> = {
   claim: {
     label: "Claim",
@@ -227,6 +236,26 @@ export function ContentDetailPage() {
   // Interactive revision history selected revision
   const [selectedHistoryRevN, setSelectedHistoryRevN] = useState<number | null>(null);
 
+  // Activity timeline states
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  // Submit for review states
+  const [submitting, setSubmitting] = useState(false);
+  const [submitHint, setSubmitHint] = useState<string | null>(null);
+
+  // Reviewer Decision states
+  const [requestChangesOpen, setRequestChangesOpen] = useState(false);
+  const [requestChangesComment, setRequestChangesComment] = useState("");
+  const [requestingChanges, setRequestingChanges] = useState(false);
+
+  // Override dialog states
+  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideHighCount, setOverrideHighCount] = useState<number | null>(null);
+  const [overrideAiStatus, setOverrideAiStatus] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Timer for review running progress
@@ -242,6 +271,19 @@ export function ContentDetailPage() {
     }
     return () => clearInterval(interval);
   }, [reviewRunning]);
+
+  const fetchActivity = async () => {
+    if (!id) return;
+    setActivityLoading(true);
+    try {
+      const data = await apiFetch<{ activity: ActivityItem[] }>(`/api/contents/${id}/activity`);
+      setActivity(data.activity || []);
+    } catch (err) {
+      console.error("Failed to fetch activity:", err);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
 
   const fetchAll = async () => {
     if (!id) return;
@@ -259,11 +301,15 @@ export function ContentDetailPage() {
       }
       throw err;
     });
+    const activityPromise = apiFetch<{ activity: ActivityItem[] }>(
+      `/api/contents/${id}/activity`,
+    ).catch(() => null);
 
     try {
-      const [contentData, reviewData] = await Promise.all([
+      const [contentData, reviewData, activityData] = await Promise.all([
         contentPromise,
         reviewPromise,
+        activityPromise,
       ]);
       setContent(contentData);
       if (reviewData) {
@@ -272,6 +318,9 @@ export function ContentDetailPage() {
       } else {
         setReview(null);
         setFindings([]);
+      }
+      if (activityData) {
+        setActivity(activityData.activity || []);
       }
     } catch (err) {
       console.error("Failed to load content:", err);
@@ -309,6 +358,7 @@ export function ContentDetailPage() {
       );
       setReview(res.review);
       setFindings(res.findings);
+      await fetchActivity();
     } catch (err) {
       console.error("Run review failed:", err);
       if (err instanceof ApiError) {
@@ -386,6 +436,7 @@ export function ContentDetailPage() {
       setActiveEditId(null);
       setActiveDismissId(null);
       setActiveChangeId(null);
+      await fetchActivity();
     } catch (err) {
       console.error("Resolution failed:", err);
       if (
@@ -539,6 +590,152 @@ export function ContentDetailPage() {
     }
   };
 
+  const handleSubmitForReview = async () => {
+    if (!id || submitting) return;
+    if (!isLatestReview) {
+      setSubmitHint("Run Vouch review on the latest revision first");
+      return;
+    }
+    setSubmitting(true);
+    setActionError(null);
+    setSubmitHint(null);
+    try {
+      const res = await apiFetch<{ content: ContentDetail }>(
+        `/api/contents/${id}/submit`,
+        { method: "POST" },
+      );
+      setContent(res.content);
+      await fetchActivity();
+    } catch (err) {
+      const errData = err instanceof ApiError ? (err.data as any) : null;
+      if (err instanceof ApiError && err.status === 409 && (errData?.error === "review_required" || err.message === "review_required")) {
+        setSubmitHint("Run Vouch review on the latest revision first");
+      } else if (err instanceof ApiError) {
+        setActionError(err.message);
+      } else {
+        setActionError("Failed to submit content.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRequestChanges = async () => {
+    if (!id || requestingChanges || requestChangesComment.trim().length < 5) return;
+    setRequestingChanges(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch<{ content: ContentDetail; approval: any }>(
+        `/api/contents/${id}/decision`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            decision: "request_changes",
+            comment: requestChangesComment.trim(),
+          }),
+        },
+      );
+      setContent(res.content);
+      setRequestChangesComment("");
+      setRequestChangesOpen(false);
+      await fetchActivity();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setActionError(err.message);
+      } else {
+        setActionError("Failed to request changes.");
+      }
+    } finally {
+      setRequestingChanges(false);
+    }
+  };
+
+  const handleApprove = async (withOverride = false) => {
+    if (!id || approving) return;
+    setApproving(true);
+    setActionError(null);
+    try {
+      const body: Record<string, any> = { decision: "approve" };
+      if (withOverride) {
+        body.override_reason = overrideReason.trim();
+      }
+      const res = await apiFetch<{ content: ContentDetail; approval: any }>(
+        `/api/contents/${id}/decision`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
+      setContent(res.content);
+      setOverrideDialogOpen(false);
+      setOverrideReason("");
+      await fetchActivity();
+    } catch (err) {
+      const errData = err instanceof ApiError ? (err.data as any) : null;
+      if (err instanceof ApiError && err.status === 409 && (errData?.error === "override_required" || err.message === "override_required")) {
+        setOverrideHighCount(errData?.open_high ?? 0);
+        setOverrideAiStatus(errData?.ai_status ?? null);
+        setOverrideDialogOpen(true);
+      } else if (err instanceof ApiError) {
+        setActionError(err.message);
+      } else {
+        setActionError("Failed to approve content.");
+      }
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const getActionDisplay = (item: ActivityItem) => {
+    switch (item.action) {
+      case "contents.create":
+      case "content.create":
+        return "Created content";
+      case "revision.create":
+        return `Created revision ${item.details?.n ?? ""}`.trim();
+      case "review.run":
+        return "Ran Vouch review";
+      case "content.submit":
+        return "Submitted for review";
+      case "content.request_changes":
+        return "Requested changes";
+      case "content.approve":
+        return item.details?.override_reason ? "Approved with override" : "Approved";
+      case "finding.resolve":
+        if (item.details?.action === "accept") return "Accepted fix";
+        if (item.details?.action === "edit") return "Edited";
+        if (item.details?.action === "dismiss") return "Dismissed";
+        return "Resolved finding";
+      case "comment":
+        return "Commented";
+      default:
+        return item.action;
+    }
+  };
+
+  const getItemDetails = (item: ActivityItem) => {
+    if (item.action === "content.request_changes" && item.details?.comment) {
+      return item.details.comment;
+    }
+    if (item.action === "content.approve" && item.details?.override_reason) {
+      return `Override: ${item.details.override_reason}`;
+    }
+    if (item.action === "finding.resolve") {
+      if (item.details?.replacement_text) return `Replacement: "${item.details.replacement_text}"`;
+      if (item.details?.dismiss_reason) return `Reason: "${item.details.dismiss_reason}"`;
+    }
+    if (item.action === "comment" && item.details?.body) {
+      return item.details.body;
+    }
+    if (item.action === "review.run" && item.details?.findings_count !== undefined) {
+      return `${item.details.findings_count} finding(s) · AI: ${item.details.ai_status ?? "ok"}`;
+    }
+    if (item.action === "revision.create" && item.details?.mode) {
+      return `Mode: ${item.details.mode}`;
+    }
+    return null;
+  };
+
   const backLink = user?.role === "creator" ? "/content" : "/reviews";
   const backLabel = user?.role === "creator" ? "Content" : "Reviews";
 
@@ -596,7 +793,19 @@ export function ContentDetailPage() {
   const isCreatorOwner = Boolean(
     user?.role === "creator" && content && user?.id === content.created_by,
   );
-  const canResolve = Boolean(isCreatorOwner && isLatestReview && !staleReviewAlert);
+  const isApproved = content?.status === "approved";
+  const isInReview = content?.status === "in_review";
+  const isChangesRequested = content?.status === "changes_requested";
+  const isDraft = content?.status === "draft";
+  const canResolve = Boolean(isCreatorOwner && isLatestReview && !staleReviewAlert && !isApproved);
+
+  // Derived from activity
+  const approvedEvent = activity.slice().reverse().find((a) => a.action === "content.approve");
+  const approvedBy = approvedEvent?.actor_name || "Reviewer";
+  const approvedDate = approvedEvent ? new Date(approvedEvent.time).toLocaleDateString() : "";
+  const approvedOverrideReason = approvedEvent?.details?.override_reason;
+
+  const requestChangesEvent = activity.slice().reverse().find((a) => a.action === "content.request_changes");
 
   // Ready fixes count (accepted + edited)
   const readyFindings = findings.filter(
@@ -926,38 +1135,58 @@ export function ContentDetailPage() {
           </div>
         </div>
 
-        {/* Run Vouch review button */}
-        <div className="flex items-center gap-3 self-start sm:self-auto">
-          <button
-            type="button"
-            disabled={loading || reviewRunning || !latestRevision}
-            onClick={handleRunReview}
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {reviewRunning ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Reviewing…</span>
-              </>
-            ) : (
-              <>
-                <svg
-                  className="w-4 h-4 text-slate-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <span>Run Vouch review</span>
-              </>
-            )}
-          </button>
+        {/* Run Vouch review and Submit buttons */}
+        <div className="flex items-center gap-3 self-start sm:self-auto flex-wrap justify-end">
+          {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && (
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                disabled={submitting || !isLatestReview}
+                onClick={handleSubmitForReview}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Submitting…" : "Submit for review"}
+              </button>
+              {(!isLatestReview || submitHint) && (
+                <span className="text-[11px] text-amber-700 font-medium">
+                  {submitHint || "Run Vouch review on the latest revision first"}
+                </span>
+              )}
+            </div>
+          )}
+
+          {!isApproved && (
+            <button
+              type="button"
+              disabled={loading || reviewRunning || !latestRevision}
+              onClick={handleRunReview}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {reviewRunning ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Reviewing…</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4 text-slate-300"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span>Run Vouch review</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -972,6 +1201,121 @@ export function ContentDetailPage() {
             </span>
           </div>
           <span className="text-xs text-blue-600 font-mono">Keep page open</span>
+        </div>
+      )}
+
+      {/* Approved Banner */}
+      {isApproved && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-sm text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+            <div>
+              <span className="font-semibold block sm:inline">
+                Approved by {approvedBy}{approvedDate ? ` on ${approvedDate}` : ""}
+              </span>
+              {approvedOverrideReason && (
+                <span className="text-xs text-emerald-800 block sm:inline sm:ml-2">
+                  (Override: {approvedOverrideReason})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Changes Requested Banner */}
+      {isChangesRequested && requestChangesEvent && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center shrink-0 font-bold text-xs">
+              !
+            </span>
+            <div>
+              <span className="font-semibold block sm:inline">
+                Changes requested by {requestChangesEvent.actor_name || "Reviewer"}
+              </span>
+              {requestChangesEvent.details?.comment && (
+                <p className="text-xs text-amber-900 mt-0.5 font-medium">
+                  "{requestChangesEvent.details.comment}"
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reviewer Decision Panel */}
+      {user?.role === "reviewer" && isInReview && (
+        <div className="bg-white border-2 border-purple-200 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Reviewer Decision</h3>
+              <p className="text-xs text-slate-500">
+                Review the content and findings above, then approve or request changes.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRequestChangesOpen(!requestChangesOpen)}
+                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer"
+              >
+                Request changes
+              </button>
+              <button
+                type="button"
+                disabled={approving}
+                onClick={() => handleApprove(false)}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {approving ? "Approving…" : "Approve"}
+              </button>
+            </div>
+          </div>
+
+          {requestChangesOpen && (
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Feedback / Changes required (min 5 characters)
+              </label>
+              <textarea
+                value={requestChangesComment}
+                onChange={(e) => setRequestChangesComment(e.target.value)}
+                rows={3}
+                placeholder="Explain what needs to be changed..."
+                className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400">
+                  {requestChangesComment.trim().length} / 5 chars min
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestChangesOpen(false);
+                      setRequestChangesComment("");
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={requestingChanges || requestChangesComment.trim().length < 5}
+                    onClick={handleRequestChanges}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
+                  >
+                    {requestingChanges ? "Submitting…" : "Confirm request changes"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1407,7 +1751,7 @@ export function ContentDetailPage() {
         {/* Right Column (6 cols): Apply Fixes Bar + Claim Ledger + Rule Findings */}
         <div className="lg:col-span-6 space-y-6">
           {/* Creator Apply Fixes Bar (Requirement 4 & 6) */}
-          {isCreatorOwner && isLatestReview && (
+          {isCreatorOwner && isLatestReview && !isApproved && (
             <div className="bg-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span
@@ -1770,6 +2114,62 @@ export function ContentDetailPage() {
         </div>
       </div>
 
+      {/* Activity Section */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Activity</h3>
+            <p className="text-xs text-slate-500">
+              Timeline of revisions, reviews, submissions, and approvals.
+            </p>
+          </div>
+          <span className="text-xs text-slate-400 font-medium">{activity.length} event(s)</span>
+        </div>
+
+        {activityLoading && activity.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-400">Loading activity…</div>
+        ) : activity.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-400">No activity recorded yet.</div>
+        ) : (
+          <div className="space-y-3">
+            {activity.map((item) => {
+              const detailsStr = getItemDetails(item);
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-3 text-xs border-l-2 border-slate-200 pl-3 py-1"
+                >
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-900">
+                        {item.actor_name || "System"}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="font-medium text-slate-700">
+                        {getActionDisplay(item)}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-400 text-[11px] font-mono">
+                        {new Date(item.time).toLocaleDateString()}{" "}
+                        {new Date(item.time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    {detailsStr && (
+                      <p className="text-slate-600 text-xs mt-0.5 bg-slate-50 p-2 rounded border border-slate-100">
+                        {detailsStr}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Preview Changes Modal (Requirement 4) */}
       {previewModalOpen && previewData && latestRevision && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
@@ -1923,6 +2323,78 @@ export function ContentDetailPage() {
                 ) : (
                   <span>Save as revision {nextRevisionN}</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Override Reason Dialog */}
+      {overrideDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Approval Requires Override
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  An override reason is required to approve this content.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOverrideDialogOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+                <span className="font-bold block">Conditions requiring override:</span>
+                {typeof overrideHighCount === "number" && overrideHighCount > 0 && (
+                  <p>• {overrideHighCount} high-severity issue(s) still open</p>
+                )}
+                {overrideAiStatus && overrideAiStatus !== "ok" && (
+                  <p>• AI check was unavailable</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  Override reason (min 10 characters)
+                </label>
+                <textarea
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  rows={4}
+                  placeholder="Explain why this content is approved despite open issues..."
+                  className="w-full text-xs p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  autoFocus
+                />
+                <span className="text-[11px] text-slate-400 block text-right">
+                  {overrideReason.trim().length} / 10 chars min
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setOverrideDialogOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={approving || overrideReason.trim().length < 10}
+                onClick={() => handleApprove(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {approving ? "Approving…" : "Approve with override"}
               </button>
             </div>
           </div>
