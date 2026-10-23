@@ -291,6 +291,16 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - 100% of drafts matched `source_text.slice(start, end) === source_quote`.
     - Every run detected duplicates: Superlatives -> `CLAIM-01`, Numbers/durations -> `CLAIM-03`, Trademark spelling -> `TERM-01`. Zero writes on live DB.
 
+- Final polish and cleanup (S12a) completed and live:
+  - Generic preferred term regex: Removed hardcoded "aqualeaf" from `server/src/engine/ruleChecks.ts`. Variant detection is driven dynamically from the organization's `terms` table (`term` + listed quoted variants in `note`). Verified with unit tests for Aqualeaf and Northwind Labs. No hardcoded brand strings remain in `server/src/engine`.
+  - Cold start pre-warm: `LoginPage.tsx` triggers a fire-and-forget `GET /api/health` on mount, warming up the serverless environment before demo login clicks.
+  - Guideline import progress and formatting: While drafting, progress text cycles through "Reading guideline…" -> "Drafting rules…" -> "Checking duplicates…". Excerpt display cleans markdown syntax (`**`, `__`, `#`, leading `- `) while keeping source offsets and highlight `<mark>` verbatim.
+  - Audit log polish:
+    - Details for `rules.import` formatted as "Imported N rules: CODE-01, CODE-02".
+    - "Hide sign-ins" checkbox added (checked by default), filtering `auth.*` events server-side (`?exclude=auth`).
+    - Dynamic `GET /api/audit/actions` endpoint returns distinct org-scoped actions.
+    - Action column renders human-readable action title with raw action code below; layout verified at 1280px and 1440px.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
