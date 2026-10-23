@@ -618,8 +618,8 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
   try {
     // Verify content exists and is owned by this creator
-    const { rows: contentRows } = await pool.query<{ id: string; created_by: string }>(
-      `SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2`,
+    const { rows: contentRows } = await pool.query<{ id: string; created_by: string; status: string }>(
+      `SELECT id, created_by, status FROM contents WHERE id = $1 AND organization_id = $2`,
       [id, orgId],
     );
 
@@ -629,6 +629,10 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
     if (contentRows[0].created_by !== req.user!.id) {
       return res.status(404).json({ error: "not_found" });
+    }
+
+    if (contentRows[0].status === "approved") {
+      return res.status(409).json({ error: "approved_locked" });
     }
 
     const { mode } = parseResult.data;
@@ -652,7 +656,10 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
         const revision = revRows[0];
 
         await client.query(
-          `UPDATE contents SET updated_at = now() WHERE id = $1 AND organization_id = $2`,
+          `UPDATE contents
+           SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
+               updated_at = now()
+           WHERE id = $1 AND organization_id = $2`,
           [id, orgId],
         );
 
@@ -812,7 +819,10 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
       const revision = revRows[0];
 
       await client.query(
-        `UPDATE contents SET updated_at = now() WHERE id = $1 AND organization_id = $2`,
+        `UPDATE contents
+         SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
+             updated_at = now()
+         WHERE id = $1 AND organization_id = $2`,
         [id, orgId],
       );
 
@@ -842,6 +852,465 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error("POST /api/contents/:id/revisions error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// POST /api/contents/:id/submit (creator owner only)
+contentsRouter.post("/:id/submit", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  // Creator only
+  if (req.user!.role !== "creator") {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  try {
+    const { rows: contentRows } = await pool.query<{
+      id: string;
+      created_by: string;
+      status: string;
+    }>(
+      `SELECT id, created_by, status FROM contents WHERE id = $1 AND organization_id = $2`,
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    if (contentRows[0].created_by !== req.user!.id) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const content = contentRows[0];
+    if (content.status !== "draft" && content.status !== "changes_requested") {
+      return res.status(409).json({ error: "invalid_status", status: content.status });
+    }
+
+    // Latest revision
+    const { rows: latestRevRows } = await pool.query<{ id: string; n: number }>(
+      `SELECT id, n FROM revisions
+       WHERE content_id = $1 AND organization_id = $2
+       ORDER BY n DESC LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (latestRevRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const latestRev = latestRevRows[0];
+
+    // Latest review of content
+    const { rows: latestReviewRows } = await pool.query<{
+      id: string;
+      revision_id: string;
+    }>(
+      `SELECT rw.id, rw.revision_id
+       FROM reviews rw
+       JOIN revisions rv ON rw.revision_id = rv.id
+       WHERE rv.content_id = $1 AND rw.organization_id = $2
+       ORDER BY rw.created_at DESC LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (latestReviewRows.length === 0 || latestReviewRows[0].revision_id !== latestRev.id) {
+      return res.status(409).json({ error: "review_required" });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: updatedRows } = await client.query(
+        `UPDATE contents
+         SET status = 'in_review', updated_at = now()
+         WHERE id = $1 AND organization_id = $2
+         RETURNING *`,
+        [id, orgId],
+      );
+
+      await logAudit({
+        organizationId: orgId,
+        actor: req.user!.id,
+        action: "content.submit",
+        entity: `content:${id}`,
+        payload: {
+          content_id: id,
+          revision_id: latestRev.id,
+        },
+        client,
+      });
+
+      await client.query("COMMIT");
+      return res.json({ content: updatedRows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("POST /api/contents/:id/submit error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+const decisionBodySchema = z.object({
+  decision: z.enum(["approve", "request_changes"]),
+  comment: z.string().optional(),
+  override_reason: z.string().optional(),
+});
+
+// POST /api/contents/:id/decision (reviewer only; others 403)
+contentsRouter.post("/:id/decision", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  // Reviewer only
+  if (req.user!.role !== "reviewer") {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  const parseResult = decisionBodySchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: "invalid_input", details: parseResult.error.format() });
+  }
+
+  const { decision, comment, override_reason } = parseResult.data;
+
+  try {
+    const { rows: contentRows } = await pool.query<{
+      id: string;
+      status: string;
+    }>(
+      `SELECT id, status FROM contents WHERE id = $1 AND organization_id = $2`,
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const content = contentRows[0];
+    if (content.status !== "in_review") {
+      return res.status(409).json({ error: "not_in_review" });
+    }
+
+    // Latest revision
+    const { rows: latestRevRows } = await pool.query<{ id: string; n: number }>(
+      `SELECT id, n FROM revisions
+       WHERE content_id = $1 AND organization_id = $2
+       ORDER BY n DESC LIMIT 1`,
+      [id, orgId],
+    );
+
+    if (latestRevRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const latestRev = latestRevRows[0];
+
+    // Latest review of that latest revision
+    const { rows: latestReviewRows } = await pool.query<{
+      id: string;
+      ai_status: string;
+    }>(
+      `SELECT id, ai_status FROM reviews
+       WHERE revision_id = $1 AND organization_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [latestRev.id, orgId],
+    );
+
+    if (latestReviewRows.length === 0) {
+      return res.status(409).json({ error: "review_required" });
+    }
+    const latestReview = latestReviewRows[0];
+
+    let targetStatus: string;
+    let approvalDecision: "approved" | "changes_requested";
+
+    if (decision === "request_changes") {
+      if (!comment || typeof comment !== "string" || comment.trim().length < 5) {
+        return res.status(400).json({
+          error: "invalid_input",
+          details: "Comment is required (min 5 characters)",
+        });
+      }
+      targetStatus = "changes_requested";
+      approvalDecision = "changes_requested";
+    } else {
+      // decision === "approve"
+      // Count open findings with severity high that are not a supported claim
+      const { rows: openHighRows } = await pool.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM findings
+         WHERE review_id = $1
+           AND organization_id = $2
+           AND resolution = 'open'
+           AND severity = 'high'
+           AND NOT (kind = 'claim' AND verdict = 'supported')`,
+        [latestReview.id, orgId],
+      );
+      const openHighCount = openHighRows[0]?.count ?? 0;
+      const aiStatus = latestReview.ai_status;
+
+      if (openHighCount > 0 || aiStatus !== "ok") {
+        if (!override_reason || typeof override_reason !== "string" || override_reason.trim().length < 10) {
+          return res.status(409).json({
+            error: "override_required",
+            open_high: openHighCount,
+            ai_status: aiStatus,
+          });
+        }
+      }
+
+      targetStatus = "approved";
+      approvalDecision = "approved";
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: updatedContentRows } = await client.query(
+        `UPDATE contents
+         SET status = $1, updated_at = now()
+         WHERE id = $2 AND organization_id = $3
+         RETURNING *`,
+        [targetStatus, id, orgId],
+      );
+
+      const trimmedOverride = override_reason?.trim() ? override_reason.trim() : null;
+      const { rows: approvalRows } = await client.query(
+        `INSERT INTO approvals (organization_id, content_id, revision_id, user_id, decision, override_reason)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, organization_id, content_id, revision_id, user_id, decision, override_reason, created_at`,
+        [orgId, id, latestRev.id, req.user!.id, approvalDecision, trimmedOverride],
+      );
+
+      if (comment && comment.trim().length > 0) {
+        await client.query(
+          `INSERT INTO comments (organization_id, content_id, revision_id, user_id, body)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [orgId, id, latestRev.id, req.user!.id, comment.trim()],
+        );
+      }
+
+      const auditAction = decision === "approve" ? "content.approve" : "content.request_changes";
+      await logAudit({
+        organizationId: orgId,
+        actor: req.user!.id,
+        action: auditAction,
+        entity: `content:${id}`,
+        payload: {
+          content_id: id,
+          revision_id: latestRev.id,
+          decision: approvalDecision,
+          override_reason: trimmedOverride,
+          comment: comment?.trim() ?? null,
+        },
+        client,
+      });
+
+      await client.query("COMMIT");
+      return res.json({
+        content: updatedContentRows[0],
+        approval: approvalRows[0],
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("POST /api/contents/:id/decision error:", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// GET /api/contents/:id/activity (all roles with view access to content)
+contentsRouter.get("/:id/activity", async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const id = String(req.params.id);
+
+  if (!UUID_REGEX.test(id)) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  try {
+    const { rows: contentRows } = await pool.query<{
+      id: string;
+      created_by: string;
+    }>(
+      `SELECT id, created_by FROM contents WHERE id = $1 AND organization_id = $2`,
+      [id, orgId],
+    );
+
+    if (contentRows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    // If role is creator, they can only view activity of content they created
+    if (req.user!.role === "creator" && contentRows[0].created_by !== req.user!.id) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    // 1. Fetch audit events for this content
+    const { rows: auditRows } = await pool.query<{
+      id: string;
+      actor: string;
+      actor_name: string;
+      action: string;
+      entity: string;
+      payload: any;
+      at: string;
+    }>(
+      `SELECT 
+         ae.id,
+         ae.actor,
+         COALESCE(u.name, 'System') AS actor_name,
+         ae.action,
+         ae.entity,
+         ae.payload,
+         ae.at
+       FROM audit_events ae
+       LEFT JOIN users u ON u.id::text = ae.actor
+       WHERE ae.organization_id = $2
+         AND (ae.entity = 'content:' || $1 OR ae.payload->>'content_id' = $1)
+       ORDER BY ae.at ASC, ae.id ASC`,
+      [id, orgId],
+    );
+
+    // 2. Fetch comments for this content
+    const { rows: commentRows } = await pool.query<{
+      id: string;
+      user_id: string;
+      actor_name: string;
+      body: string;
+      revision_id: string | null;
+      created_at: string;
+    }>(
+      `SELECT 
+         c.id,
+         c.user_id,
+         COALESCE(u.name, 'Unknown') AS actor_name,
+         c.body,
+         c.revision_id,
+         c.created_at
+       FROM comments c
+       LEFT JOIN users u ON u.id = c.user_id
+       WHERE c.organization_id = $2 AND c.content_id = $1
+       ORDER BY c.created_at ASC, c.id ASC`,
+      [id, orgId],
+    );
+
+    interface ActivityItem {
+      id: string;
+      action: string;
+      actor: string;
+      actor_name: string;
+      time: string;
+      details: Record<string, unknown>;
+    }
+
+    const timeline: ActivityItem[] = [];
+
+    for (const ae of auditRows) {
+      let details: Record<string, unknown> = {};
+      const p = ae.payload || {};
+
+      switch (ae.action) {
+        case "contents.create":
+        case "content.create":
+          details = { title: p.title, channel: p.channel };
+          break;
+        case "revision.create":
+          details = {
+            revision_id: p.revision_id,
+            n: p.n,
+            mode: p.mode,
+            applied_count: Array.isArray(p.applied) ? p.applied.length : 0,
+            skipped_count: Array.isArray(p.skipped) ? p.skipped.length : 0,
+          };
+          break;
+        case "review.run":
+          details = {
+            revision_id: p.revision_id,
+            findings_count: p.findings_count,
+            ai_status: p.ai_status,
+          };
+          break;
+        case "finding.resolve":
+          details = {
+            action: p.action,
+            finding_id: p.finding_id,
+            reason: p.reason,
+            text: p.text,
+          };
+          break;
+        case "content.submit":
+          details = {
+            revision_id: p.revision_id,
+          };
+          break;
+        case "content.approve":
+          details = {
+            revision_id: p.revision_id,
+            override_reason: p.override_reason,
+            comment: p.comment,
+          };
+          break;
+        case "content.request_changes":
+          details = {
+            revision_id: p.revision_id,
+            comment: p.comment,
+          };
+          break;
+        default:
+          details = p;
+          break;
+      }
+
+      timeline.push({
+        id: ae.id,
+        action: ae.action,
+        actor: ae.actor,
+        actor_name: ae.actor_name,
+        time: ae.at,
+        details,
+      });
+    }
+
+    for (const c of commentRows) {
+      timeline.push({
+        id: c.id,
+        action: "comment",
+        actor: c.user_id,
+        actor_name: c.actor_name,
+        time: c.created_at,
+        details: {
+          body: c.body,
+          revision_id: c.revision_id,
+        },
+      });
+    }
+
+    // Sort timeline oldest first (time ASC)
+    timeline.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+    return res.json({ activity: timeline });
+  } catch (err) {
+    console.error("GET /api/contents/:id/activity error:", err);
     return res.status(500).json({ error: "internal_error" });
   }
 });

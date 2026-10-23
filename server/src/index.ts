@@ -8,6 +8,7 @@ import rulesRouter from "./routes/rules.js";
 import termsRouter from "./routes/terms.js";
 import { aiRouter } from "./routes/ai.js";
 import findingsRouter from "./routes/findings.js";
+import auditRouter from "./routes/audit.js";
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/facts", factsRouter);
 app.use("/api/terms", termsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/findings", findingsRouter);
+app.use("/api/audit", auditRouter);
 
 // Unknown routes
 app.use((_req: Request, res: Response) => {
