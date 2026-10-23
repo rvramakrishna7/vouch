@@ -69,7 +69,7 @@ auditRouter.get("/", async (req: Request, res: Response) => {
         ae.payload,
         ae.at
       FROM audit_events ae
-      LEFT JOIN users u ON u.id::text = ae.actor
+      LEFT JOIN users u ON (u.id::text = ae.actor OR lower(u.email) = lower(ae.actor))
       WHERE ${conditions.join(" AND ")}
       ORDER BY ae.at DESC, ae.id DESC
       LIMIT ${limitPlaceholder}

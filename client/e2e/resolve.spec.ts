@@ -63,6 +63,24 @@ async function assertCleanText(page: Page) {
       `Page text should not contain icon name "${word}" as visible word`,
     ).toBe(false);
   }
+
+  // AGENTS.md 7d.2 checks:
+  const badPatterns = [
+    { pattern: /\bUnknown\b/, label: "Unknown" },
+    { pattern: /\bInvalid Date\b/, label: "Invalid Date" },
+    { pattern: /\bNaN\b/, label: "NaN" },
+    { pattern: /\bundefined\b/, label: "undefined" },
+    { pattern: /\bnull\b/, label: "null" },
+    { pattern: /\[object Object\]/, label: "[object Object]" },
+    { pattern: /\{"/, label: 'raw JSON ({" )' },
+  ];
+
+  for (const { pattern, label } of badPatterns) {
+    expect(
+      pattern.test(text),
+      `Page text should not contain placeholder/broken string "${label}". Text sample: ${text.slice(0, 300)}...`,
+    ).toBe(false);
+  }
 }
 
 test.describe("Resolve findings (TEST-006) E2E Scenario", () => {
