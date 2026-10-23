@@ -15,17 +15,26 @@ interface AuditEvent {
   at: string;
 }
 
-const ACTION_OPTIONS = [
-  { value: "", label: "All actions" },
-  { value: "content.submit", label: "content.submit" },
-  { value: "content.approve", label: "content.approve" },
-  { value: "content.request_changes", label: "content.request_changes" },
-  { value: "review.run", label: "review.run" },
-  { value: "finding.resolve", label: "finding.resolve" },
-  { value: "contents.create", label: "contents.create" },
-  { value: "revision.create", label: "revision.create" },
-  { value: "auth.demo_login", label: "auth.demo_login" },
-];
+const ACTION_LABELS: Record<string, string> = {
+  "content.submit": "Content submitted",
+  "content.approve": "Content approved",
+  "content.request_changes": "Changes requested",
+  "review.run": "Review executed",
+  "finding.resolve": "Finding resolved",
+  "contents.create": "Content created",
+  "content.create": "Content created",
+  "revision.create": "Revision created",
+  "rules.create": "Rule created",
+  "rules.update": "Rule updated",
+  "rules.import": "Rules imported",
+  "facts.create": "Fact created",
+  "terms.create": "Term created",
+  "terms.update": "Term updated",
+  "terms.delete": "Term deleted",
+  "auth.login": "Signed in",
+  "auth.demo_login": "Signed in (demo)",
+  "seed:init": "Demo brand seeded",
+};
 
 export function AuditPage() {
   const { user } = useAuth();
@@ -40,13 +49,48 @@ export function AuditPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState("");
+  const [hideSignIns, setHideSignIns] = useState(true);
+  const [availableActions, setAvailableActions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchEvents = async (filter: string) => {
+  // Fetch distinct org-scoped actions on mount
+  useEffect(() => {
+    let mounted = true;
+    apiFetch<{ actions: string[] }>("/api/audit/actions")
+      .then((res) => {
+        if (mounted && Array.isArray(res.actions)) {
+          setAvailableActions(res.actions);
+        }
+      })
+      .catch(() => {
+        // Fallback default actions
+        setAvailableActions([
+          "content.submit",
+          "content.approve",
+          "content.request_changes",
+          "review.run",
+          "finding.resolve",
+          "contents.create",
+          "revision.create",
+          "rules.import",
+          "rules.create",
+          "rules.update",
+          "auth.demo_login",
+        ]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const fetchEvents = async (filter: string, excludeAuth: boolean) => {
     setLoading(true);
     setError(null);
     try {
       let query = "/api/audit?limit=25";
+      if (excludeAuth) {
+        query += "&exclude=auth";
+      }
       if (filter) {
         query += `&action=${encodeURIComponent(filter)}`;
       }
@@ -70,14 +114,17 @@ export function AuditPage() {
   };
 
   useEffect(() => {
-    fetchEvents(actionFilter);
-  }, [actionFilter]);
+    fetchEvents(actionFilter, hideSignIns);
+  }, [actionFilter, hideSignIns]);
 
   const handleLoadMore = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
       let query = `/api/audit?limit=25&before=${encodeURIComponent(nextCursor)}`;
+      if (hideSignIns) {
+        query += "&exclude=auth";
+      }
       if (actionFilter) {
         query += `&action=${encodeURIComponent(actionFilter)}`;
       }
@@ -99,6 +146,13 @@ export function AuditPage() {
     if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) return "—";
 
     switch (action) {
+      case "rules.import": {
+        const count = payload.count ?? (Array.isArray(payload.codes) ? payload.codes.length : 0);
+        const codesStr = Array.isArray(payload.codes) && payload.codes.length > 0
+          ? `: ${payload.codes.join(", ")}`
+          : "";
+        return `Imported ${count} rules${codesStr}`;
+      }
       case "auth.demo_login":
         return payload.role ? `Role: ${payload.role}` : "Demo login";
       case "contents.create":
@@ -178,6 +232,10 @@ export function AuditPage() {
     }
   };
 
+  const getReadableAction = (action: string) => {
+    return ACTION_LABELS[action] || action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -190,23 +248,36 @@ export function AuditPage() {
           </p>
         </div>
 
-        {/* Action filter dropdown */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="action-filter" className="text-xs font-medium text-slate-600">
-            Filter action:
+        {/* Action filter dropdown & Hide sign-ins checkbox */}
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={hideSignIns}
+              onChange={(e) => setHideSignIns(e.target.checked)}
+              className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 cursor-pointer"
+            />
+            <span>Hide sign-ins</span>
           </label>
-          <select
-            id="action-filter"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
-          >
-            {ACTION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="action-filter" className="text-xs font-medium text-slate-600">
+              Filter action:
+            </label>
+            <select
+              id="action-filter"
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+              <option value="">All actions</option>
+              {availableActions.map((act) => (
+                <option key={act} value={act}>
+                  {act}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -221,10 +292,10 @@ export function AuditPage() {
           <table className="table-fixed w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="w-44 px-4 py-3">Time</th>
-                <th className="w-40 px-4 py-3">Actor</th>
-                <th className="w-44 px-4 py-3">Action</th>
-                <th className="w-48 px-4 py-3">Entity</th>
+                <th className="w-40 px-4 py-3">Time</th>
+                <th className="w-36 px-4 py-3">Actor</th>
+                <th className="w-48 px-4 py-3">Action</th>
+                <th className="w-44 px-4 py-3">Entity</th>
                 <th className="px-4 py-3">Details</th>
               </tr>
             </thead>
@@ -246,6 +317,7 @@ export function AuditPage() {
                   const { short: entityShort, full: entityFull } = formatEntityShort(ev.entity);
                   const payloadText = formatPayload(ev.action, ev.payload);
                   const actorDisplay = ev.actor_name && ev.actor_name !== "Unknown" ? ev.actor_name : (ev.actor || "—");
+                  const readableAction = getReadableAction(ev.action);
 
                   return (
                     <tr key={ev.id} className="hover:bg-slate-50/60 transition">
@@ -255,10 +327,15 @@ export function AuditPage() {
                       <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap truncate" title={actorDisplay}>
                         {actorDisplay}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-800 border border-slate-200">
-                          {ev.action}
-                        </span>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5 max-w-[180px]">
+                          <span className="font-semibold text-xs text-slate-900 truncate" title={readableAction}>
+                            {readableAction}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-400 truncate" title={ev.action}>
+                            {ev.action}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-600 truncate" title={entityFull}>
                         <span>{entityShort}</span>
