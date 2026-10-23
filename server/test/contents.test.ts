@@ -201,7 +201,8 @@ describe.runIf(hasDb)("Contents API (submission, revisions, isolation)", () => {
     expect(reviewerListRes.body.length).toBeGreaterThanOrEqual(2);
 
     const seededDraft = reviewerListRes.body.find(
-      (c: { title: string }) => c.title === "Instagram caption: Flow launch",
+      (c: { title: string; status: string }) =>
+        c.title === "Instagram caption: Flow launch" && c.status === "draft",
     );
     expect(seededDraft).toBeDefined();
     expect(seededDraft.channel).toBe("Instagram");

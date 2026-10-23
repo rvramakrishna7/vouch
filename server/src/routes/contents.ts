@@ -321,6 +321,7 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
     const { rows: contentRows } = await pool.query<{
       id: string;
       created_by: string;
+      status: string;
       purpose: string;
       audience: string;
       channel: string;
@@ -328,7 +329,7 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
       revision_n: number;
       revision_body: string;
     }>(
-      `SELECT c.id, c.created_by, c.purpose, c.audience, c.channel,
+      `SELECT c.id, c.created_by, c.status, c.purpose, c.audience, c.channel,
               r.id AS revision_id, r.n AS revision_n, r.body AS revision_body
        FROM contents c
        JOIN revisions r ON r.content_id = c.id AND r.organization_id = c.organization_id
@@ -345,6 +346,14 @@ contentsRouter.post("/:id/reviews", async (req: Request, res: Response) => {
     const content = contentRows[0];
     if (req.user!.role === "creator" && content.created_by !== req.user!.id) {
       return res.status(404).json({ error: "not_found" });
+    }
+
+    if (content.status === "approved") {
+      return res.status(409).json({ error: "approved_locked" });
+    }
+
+    if (content.status === "in_review") {
+      return res.status(409).json({ error: "in_review_locked" });
     }
 
     // 2. Fetch rules, terms, and execute Claim Ledger in parallel
@@ -635,6 +644,10 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "approved_locked" });
     }
 
+    if (contentRows[0].status === "in_review") {
+      return res.status(409).json({ error: "in_review_locked" });
+    }
+
     const { mode } = parseResult.data;
 
     if (mode === "manual") {
@@ -657,7 +670,7 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
         await client.query(
           `UPDATE contents
-           SET status = CASE WHEN status IN ('changes_requested', 'in_review') THEN 'draft' ELSE status END,
+           SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
                updated_at = now()
            WHERE id = $1 AND organization_id = $2`,
           [id, orgId],
@@ -820,7 +833,7 @@ contentsRouter.post("/:id/revisions", async (req: Request, res: Response) => {
 
       await client.query(
         `UPDATE contents
-         SET status = CASE WHEN status IN ('changes_requested', 'in_review') THEN 'draft' ELSE status END,
+         SET status = CASE WHEN status = 'changes_requested' THEN 'draft' ELSE status END,
              updated_at = now()
          WHERE id = $1 AND organization_id = $2`,
         [id, orgId],

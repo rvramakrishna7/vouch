@@ -3,7 +3,19 @@ import * as fs from "fs";
 import * as path from "path";
 
 const API = "http://api.test";
+const CONTENT_ID = "fd4ebc26-03e0-40d9-8a7b-5895dc216974";
 const BODY = "India's No.1 eco-friendly water bottle, now 40% lighter.";
+
+const LONG_TITLE =
+  "Aqualeaf Pure Spring Water Edition 2026 - Comprehensive Multi-Channel Influencer Campaign Announcement (Official Launch Copy)";
+const LONG_PURPOSE =
+  "Comprehensive multi-tier brand awareness and product launch across digital, social, and print channels";
+const LONG_AUDIENCE =
+  "Eco-conscious urban young professionals and fitness enthusiasts in Tier-1 metropolitan cities";
+const LONG_COMMENT =
+  "The term No.1 cannot be substantiated without the Bureau of Indian Standards certificate number and the June 2026 consumer benchmark survey documentation clearly referenced.";
+const LONG_OVERRIDE =
+  "Authorized exceptional waiver by Vice President of Brand Governance Priya Sharma per Executive Committee Resolution EC-2026-88 pending final audit certification.";
 
 // AGENTS.md 7d.2: assertCleanText must also fail on:
 // Unknown, Invalid Date, NaN, undefined, null, [object Object], and raw JSON ({" ) in visible text.
@@ -46,7 +58,33 @@ async function assertCleanText(page: Page) {
   }
 }
 
-test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E", () => {
+// AGENTS.md 7e.2: Every e2e test checks layout at 1280 px and 1440 px width
+async function assertNoHorizontalOverflow(page: Page, contextLabel: string) {
+  for (const width of [1280, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(
+      scrollWidth,
+      `Horizontal page overflow at ${width}px (${contextLabel}): scrollWidth ${scrollWidth} > clientWidth ${clientWidth}`,
+    ).toBeLessThanOrEqual(clientWidth);
+
+    // Check table overflow if table exists on page
+    const tableOverflow = await page.evaluate(() => {
+      const table = document.querySelector("table");
+      if (!table) return false;
+      return table.scrollWidth > table.clientWidth;
+    });
+    expect(
+      tableOverflow,
+      `Table horizontal overflow at ${width}px (${contextLabel})`,
+    ).toBe(false);
+  }
+}
+
+test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E", () => {
   const screenshotsDir = path.join(process.cwd(), "e2e", "screenshots");
 
   test.beforeAll(() => {
@@ -55,60 +93,63 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     }
   });
 
-  test("Complete approval workflow, activity timeline, and audit log with full realistic fields", async ({ page }) => {
+  test("Complete approval workflow, polish, layout at 1280/1440px, speed budget, and in-review lock", async ({ page }) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (err) => pageErrors.push(err.message));
 
     // Mock state
     let contentStatus = "draft";
     let hasReview = false;
-    let currentUserRole = "creator"; // 'creator' | 'reviewer' | 'brand_manager'
+    let currentUserRole = "creator"; // 'creator' | 'reviewer'
     let requestedBeforeCursor: string | null = null;
 
     const creatorUser = {
-      id: "u1",
+      id: "56ce36a5-bab2-4042-8290-f999e3d0437d",
       name: "Arjun Mehta",
       email: "demo.creator@aqualeaf.test",
       role: "creator",
     };
 
     const reviewerUser = {
-      id: "u2",
+      id: "8c321adb-119b-403b-8b2a-2bdfb3fad344",
       name: "Neha Iyer",
       email: "demo.reviewer@aqualeaf.test",
       role: "reviewer",
     };
 
-    const org = { id: "o1", name: "Aqualeaf" };
+    const org = {
+      id: "998d3d5a-8015-469f-ae6d-3877d47366c6",
+      name: "Aqualeaf",
+    };
 
     const buildContentDetail = (status: string) => ({
-      id: "c1",
-      organization_id: "o1",
-      title: "TEST-007 Workflow Post",
+      id: CONTENT_ID,
+      organization_id: org.id,
+      title: LONG_TITLE,
       channel: "Instagram",
-      audience: "Eco-conscious consumers",
-      purpose: "Product launch announcement",
+      audience: LONG_AUDIENCE,
+      purpose: LONG_PURPOSE,
       status,
-      created_by: "u1",
-      created_by_name: "Arjun Mehta",
+      created_by: creatorUser.id,
+      created_by_name: creatorUser.name,
       created_at: "2026-10-23T04:00:00.000Z",
       updated_at: "2026-10-23T04:30:00.000Z",
       revisions: [
         {
-          id: "rev1",
+          id: "7b233a1e-8422-488b-a7e8-54b9f029341c",
           n: 1,
           body: BODY,
-          created_by: "u1",
-          created_by_name: "Arjun Mehta",
+          created_by: creatorUser.id,
+          created_by_name: creatorUser.name,
           created_at: "2026-10-23T04:00:00.000Z",
         },
       ],
     });
 
     const review = {
-      id: "rw1",
-      organization_id: "o1",
-      revision_id: "rev1",
+      id: "3a218d89-9811-4a25-a1c2-901b2c45e891",
+      organization_id: org.id,
+      revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c",
       provider: "groq",
       model: "openai/gpt-oss-120b",
       started_at: "2026-10-23T04:00:01.000Z",
@@ -123,8 +164,8 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     const findings = [
       {
         id: "f1",
-        organization_id: "o1",
-        review_id: "rw1",
+        organization_id: org.id,
+        review_id: review.id,
         kind: "term",
         span_text: "No.1",
         start_offset: BODY.indexOf("No.1"),
@@ -147,8 +188,8 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
       },
       {
         id: "f2",
-        organization_id: "o1",
-        review_id: "rw1",
+        organization_id: org.id,
+        review_id: review.id,
         kind: "claim",
         span_text: "40% lighter",
         start_offset: BODY.indexOf("40% lighter"),
@@ -175,10 +216,10 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
       {
         id: "act-1",
         action: "contents.create",
-        actor: "u1",
-        actor_name: "Arjun Mehta",
+        actor: creatorUser.id,
+        actor_name: creatorUser.name,
         time: "2026-10-23T04:00:00.000Z",
-        details: { title: "TEST-007 Workflow Post", channel: "Instagram" },
+        details: { title: LONG_TITLE, channel: "Instagram" },
       },
     ];
 
@@ -212,35 +253,37 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
         return jsonFulfill([buildContentDetail(contentStatus)]);
       }
 
-      if (url.endsWith("/api/contents/c1")) {
+      if (url.endsWith(`/api/contents/${CONTENT_ID}`)) {
         return jsonFulfill(buildContentDetail(contentStatus));
       }
 
-      if (url.endsWith("/api/contents/c1/reviews/latest")) {
+      if (url.endsWith(`/api/contents/${CONTENT_ID}/reviews/latest`)) {
         if (!hasReview) {
           return jsonFulfill({ error: "not_found" }, 404);
         }
         return jsonFulfill({ review, findings });
       }
 
-      if (url.endsWith("/api/contents/c1/reviews") && method === "POST") {
+      if (url.endsWith(`/api/contents/${CONTENT_ID}/reviews`) && method === "POST") {
         hasReview = true;
         activityTimeline.push({
           id: "act-rev",
           action: "review.run",
-          actor: "u1",
-          actor_name: "Arjun Mehta",
+          actor: creatorUser.id,
+          actor_name: creatorUser.name,
           time: "2026-10-23T04:05:00.000Z",
-          details: { revision_id: "rev1", findings_count: 2, ai_status: "ok" },
+          details: { revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c", findings_count: 2, ai_status: "ok" },
         });
         return jsonFulfill({ review, findings });
       }
 
-      if (url.endsWith("/api/contents/c1/activity")) {
+      // AGENTS 7e.4: Delay activity response by 3s to verify UI speed budget (< 1s from write response)
+      if (url.endsWith(`/api/contents/${CONTENT_ID}/activity`)) {
+        await new Promise((r) => setTimeout(r, 3000));
         return jsonFulfill({ activity: activityTimeline });
       }
 
-      if (url.endsWith("/api/contents/c1/submit") && method === "POST") {
+      if (url.endsWith(`/api/contents/${CONTENT_ID}/submit`) && method === "POST") {
         if (!hasReview) {
           return jsonFulfill({ error: "review_required" }, 409);
         }
@@ -248,33 +291,33 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
         activityTimeline.push({
           id: "act-sub",
           action: "content.submit",
-          actor: "u1",
-          actor_name: "Arjun Mehta",
+          actor: creatorUser.id,
+          actor_name: creatorUser.name,
           time: "2026-10-23T04:10:00.000Z",
-          details: { revision_id: "rev1" },
+          details: { revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c" },
         });
         return jsonFulfill({
           content: buildContentDetail("in_review"),
         });
       }
 
-      if (url.endsWith("/api/contents/c1/decision") && method === "POST") {
+      if (url.endsWith(`/api/contents/${CONTENT_ID}/decision`) && method === "POST") {
         const body = JSON.parse(request.postData() || "{}");
         if (body.decision === "request_changes") {
           contentStatus = "changes_requested";
           activityTimeline.push({
             id: "act-req",
             action: "content.request_changes",
-            actor: "u2",
-            actor_name: "Neha Iyer",
+            actor: reviewerUser.id,
+            actor_name: reviewerUser.name,
             time: "2026-10-23T04:15:00.000Z",
-            details: { revision_id: "rev1", comment: body.comment },
+            details: { revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c", comment: body.comment },
           });
           return jsonFulfill({
             content: buildContentDetail("changes_requested"),
             approval: {
               decision: "changes_requested",
-              user_id: "u2",
+              user_id: reviewerUser.id,
             },
           });
         }
@@ -286,16 +329,16 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
           activityTimeline.push({
             id: "act-appr",
             action: "content.approve",
-            actor: "u2",
-            actor_name: "Neha Iyer",
+            actor: reviewerUser.id,
+            actor_name: reviewerUser.name,
             time: "2026-10-23T04:20:00.000Z",
-            details: { revision_id: "rev1", override_reason: body.override_reason },
+            details: { revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c", override_reason: body.override_reason },
           });
           return jsonFulfill({
             content: buildContentDetail("approved"),
             approval: {
               decision: "approved",
-              user_id: "u2",
+              user_id: reviewerUser.id,
               override_reason: body.override_reason,
             },
           });
@@ -312,12 +355,12 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
             events: [
               {
                 id: "ae3",
-                organization_id: "o1",
-                actor: "u1",
-                actor_name: "Arjun Mehta",
+                organization_id: org.id,
+                actor: creatorUser.id,
+                actor_name: creatorUser.name,
                 action: "contents.create",
-                entity: "content:c1",
-                payload: { title: "TEST-007 Workflow Post", channel: "Instagram" },
+                entity: `content:${CONTENT_ID}`,
+                payload: { title: LONG_TITLE, channel: "Instagram" },
                 at: "2026-10-23T04:00:00.000Z",
               },
             ],
@@ -328,22 +371,26 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
           events: [
             {
               id: "ae1",
-              organization_id: "o1",
-              actor: "u1",
-              actor_name: "Arjun Mehta",
+              organization_id: org.id,
+              actor: creatorUser.id,
+              actor_name: creatorUser.name,
               action: "content.submit",
-              entity: "content:c1",
-              payload: { content_id: "c1", revision_id: "rev1" },
+              entity: `content:${CONTENT_ID}`,
+              payload: { content_id: CONTENT_ID, revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c" },
               at: "2026-10-23T04:10:00.000Z",
             },
             {
               id: "ae2",
-              organization_id: "o1",
-              actor: "u2",
-              actor_name: "Neha Iyer",
+              organization_id: org.id,
+              actor: reviewerUser.id,
+              actor_name: reviewerUser.name,
               action: "content.request_changes",
-              entity: "content:c1",
-              payload: { content_id: "c1", revision_id: "rev1", comment: "Please remove superlative claims from text" },
+              entity: `content:${CONTENT_ID}`,
+              payload: {
+                content_id: CONTENT_ID,
+                revision_id: "7b233a1e-8422-488b-a7e8-54b9f029341c",
+                comment: LONG_COMMENT,
+              },
               at: "2026-10-23T04:05:00.000Z",
             },
           ],
@@ -365,17 +412,22 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     );
 
     // =========================================================================
-    // Step 1: Submit disabled before review -> enabled after
+    // Step 1: Submit disabled before review -> enabled after; header action row layout
     // =========================================================================
-    await page.goto("/content/c1");
-    await page.waitForSelector("h1:has-text('TEST-007 Workflow Post')");
+    await page.goto(`/content/${CONTENT_ID}`);
+    await page.waitForSelector(`h1:has-text('Aqualeaf Pure Spring Water')`);
+
+    // Verify layout at 1280 and 1440 px
+    await assertNoHorizontalOverflow(page, "Step 1 Content Detail");
 
     const submitBtn = page.locator("button:has-text('Submit for review')");
     await expect(submitBtn).toBeVisible();
     await expect(submitBtn).toBeDisabled();
-    await expect(
-      page.locator("text=Run Vouch review on the latest revision first"),
-    ).toBeVisible();
+
+    // S10c: Hint below the action row in small grey text
+    const hintLocator = page.locator("text=Run Vouch review on the latest revision first");
+    await expect(hintLocator).toBeVisible();
+    await expect(hintLocator).toHaveClass(/text-slate-500/);
 
     await assertCleanText(page);
     await page.screenshot({
@@ -394,7 +446,7 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
       page.locator("text=Run Vouch review on the latest revision first"),
     ).toHaveCount(0);
 
-    // Verify claim and rule findings rendered cleanly
+    // Verify findings rendered cleanly
     await expect(page.locator("span:has-text('1 supported as proof')")).toBeVisible();
     await expect(page.locator("span:has-text('TERM-01')")).toBeVisible();
     await expect(page.locator("text=95% confidence")).toBeVisible();
@@ -402,11 +454,24 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await assertCleanText(page);
 
     // =========================================================================
-    // Step 2: Creator submit -> In review badge
+    // Step 2: Creator submit -> In review badge and locked state (S10c)
     // =========================================================================
     await submitBtn.click();
     await page.waitForSelector("span:has-text('In review')");
+
+    // S10c: Neutral banner for in_review creator
+    await expect(
+      page.locator("text=Submitted for review. Waiting for a reviewer."),
+    ).toBeVisible();
+
+    // S10c: Creator in review has NO editing / resolving / submitting buttons
     await expect(page.locator("button:has-text('Submit for review')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Run Vouch review')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Accept fix')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Edit text manually')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Preview changes')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Dismiss')")).toHaveCount(0);
+    await expect(page.locator("button:has-text('Change')")).toHaveCount(0);
 
     await assertCleanText(page);
     await page.screenshot({
@@ -442,7 +507,7 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
       { user: reviewerUser, org },
     );
 
-    await page.goto("/content/c1");
+    await page.goto(`/content/${CONTENT_ID}`);
     await page.waitForSelector("text=Reviewer Decision");
 
     // Reviewer Decision panel visible
@@ -462,15 +527,15 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await commentInput.fill("Bad");
     await expect(confirmReqBtn).toBeDisabled();
 
-    // Type valid comment
-    await commentInput.fill("Please remove superlative claims from text");
+    // Type valid long comment
+    await commentInput.fill(LONG_COMMENT);
     await expect(confirmReqBtn).toBeEnabled();
 
     // Confirm request changes
     await confirmReqBtn.click();
     await page.waitForSelector("span:has-text('Changes requested')");
     await expect(page.locator("text=Changes requested by Neha Iyer")).toBeVisible();
-    await expect(page.locator("text=\"Please remove superlative claims from text\"")).toBeVisible();
+    await expect(page.locator(`text="${LONG_COMMENT}"`)).toBeVisible();
 
     await assertCleanText(page);
     await page.screenshot({
@@ -479,10 +544,10 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     });
 
     // =========================================================================
-    // Step 5: Reviewer approve -> 409 override_required -> dialog -> approve with override
+    // Step 5: Reviewer approve -> 409 override_required -> dialog -> approve with override (Speed check: < 1s)
     // =========================================================================
     contentStatus = "in_review";
-    await page.goto("/content/c1");
+    await page.goto(`/content/${CONTENT_ID}`);
     await page.waitForSelector("text=Reviewer Decision");
 
     const approveBtn = page.locator("button:has-text('Approve')");
@@ -499,16 +564,20 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await overrideInput.fill("Too short");
     await expect(approveWithOverrideBtn).toBeDisabled();
 
-    await overrideInput.fill("Approved exception for product launch per VP");
+    await overrideInput.fill(LONG_OVERRIDE);
     await expect(approveWithOverrideBtn).toBeEnabled();
 
-    // Confirm approval
+    // Confirm approval and test speed budget (AGENTS 7e.4: update visible within 1s, activity delayed by 3s)
+    const approveStartTime = Date.now();
     await approveWithOverrideBtn.click();
 
-    // Approved banner appears
-    await page.waitForSelector("span:has-text('Approved by Neha Iyer')");
+    // Approved banner appears within 1000ms
+    await page.waitForSelector("span:has-text('Approved by Neha Iyer')", { timeout: 1000 });
+    const elapsedMs = Date.now() - approveStartTime;
+    expect(elapsedMs).toBeLessThan(1000);
+
     await expect(
-      page.locator("text=(Override: Approved exception for product launch per VP)"),
+      page.locator(`text=(Override: ${LONG_OVERRIDE})`),
     ).toBeVisible();
 
     // Ensure all action buttons are hidden when approved
@@ -527,7 +596,7 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     });
 
     // =========================================================================
-    // Step 6: Activity timeline rendered with readable labels
+    // Step 6: Activity timeline rendered with readable labels and shared date format
     // =========================================================================
     const activitySection = page.locator("h3:has-text('Activity')");
     await expect(activitySection).toBeVisible();
@@ -545,7 +614,7 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     });
 
     // =========================================================================
-    // Step 7: /audit table + Load more pagination test (Requirement 5)
+    // Step 7: /audit table with short entity, clamped details, and 1280/1440px layout
     // =========================================================================
     const auditLink = page.locator("header nav a:has-text('Audit log')");
     await expect(auditLink).toBeVisible();
@@ -555,6 +624,12 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await expect(
       page.locator("text=Append-only system record of all governance events and decisions."),
     ).toBeVisible();
+
+    // Layout check at 1280 and 1440 px on Audit page
+    await assertNoHorizontalOverflow(page, "Step 7 Audit log page");
+
+    // S10c: Entity shortened to "content · fd4ebc26"
+    await expect(page.locator("text=content · fd4ebc26").first()).toBeVisible();
 
     // Verify initial Page 1 events
     const rowsInitial = page.locator("tbody tr");
@@ -568,7 +643,6 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await expect(loadMoreBtn).toBeEnabled();
 
     await assertCleanText(page);
-    // Screenshot 7a clearly displays the audit log with the "Load more" button
     await page.screenshot({
       path: path.join(screenshotsDir, "s10b_step7a_audit_log_page_with_load_more.png"),
       fullPage: true,
@@ -589,7 +663,6 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10b) E2E
     await expect(loadMoreBtn).toHaveCount(0);
 
     await assertCleanText(page);
-    // Screenshot 7b displays the appended rows
     await page.screenshot({
       path: path.join(screenshotsDir, "s10b_step7b_audit_log_after_load_more.png"),
       fullPage: true,
