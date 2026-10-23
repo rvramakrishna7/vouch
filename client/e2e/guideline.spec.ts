@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
+import { DEMO_GUIDELINE_TEXT as DEMO_TEXT } from "../src/data/demoGuideline.js";
 
 const API = "http://api.test";
 
@@ -111,6 +112,18 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
       },
     ];
 
+    const quote1 = "Never use unverified superlatives or number one rankings without approved survey backing.";
+    const start1 = DEMO_TEXT.indexOf(quote1);
+    const end1 = start1 + quote1.length;
+
+    const quote2 = "Every claim regarding charitable donations or environmental initiatives must name the verified partner organization and specify the exact audited contribution percentage.";
+    const start2 = DEMO_TEXT.indexOf(quote2);
+    const end2 = start2 + quote2.length;
+
+    const quote3 = 'Adopt an encouraging, active voice that speaks directly to the reader using "you" rather than impersonal third-person prose.';
+    const start3 = DEMO_TEXT.indexOf(quote3);
+    const end3 = start3 + quote3.length;
+
     const mockDraftResponse = {
       drafts: [
         {
@@ -119,9 +132,9 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
           category: "claims",
           severity: "high",
           text: "Never use unverified superlatives or number one rankings without survey proof.",
-          source_quote: "Never use unverified superlatives or number one rankings without approved survey backing.",
-          source_start: 120,
-          source_end: 215,
+          source_quote: quote1,
+          source_start: start1,
+          source_end: end1,
           duplicate_of: "CLAIM-01",
         },
         {
@@ -130,9 +143,9 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
           category: "claims",
           severity: "high",
           text: "Every claim regarding charitable donations or environmental initiatives must specify the exact audited contribution percentage.",
-          source_quote: LONG_GUIDELINE_DIRECTIVE,
-          source_start: 350,
-          source_end: 512,
+          source_quote: quote2,
+          source_start: start2,
+          source_end: end2,
           duplicate_of: null,
         },
         {
@@ -141,13 +154,14 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
           category: "tone",
           severity: "low",
           text: "Adopt an encouraging active voice that speaks directly to the reader as you.",
-          source_quote: "Adopt an encouraging, active voice that speaks directly to the reader using \"you\" rather than impersonal third-person prose.",
-          source_start: 550,
-          source_end: 675,
+          source_quote: quote3,
+          source_start: start3,
+          source_end: end3,
           duplicate_of: null,
         },
       ],
       rejected: 1,
+      source_text: DEMO_TEXT,
       ai: {
         provider: "gemini",
         model: "gemini-3.5-flash-lite",
@@ -267,10 +281,10 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
     await page.waitForSelector("text=3 rules drafted");
     await expect(page.locator("text=1 dropped due to unverified quotes")).toBeVisible();
 
-    // Check duplicate badge and default selection states
-    // Draft 1 (CLAIM-05) is duplicate of CLAIM-01 -> UNCHECKED by default
-    const dupBadge = page.locator("text=Possible duplicate of CLAIM-01");
+    // Check duplicate badge and tooltip
+    const dupBadge = page.locator("span:has-text('Possible duplicate of CLAIM-01')");
     await expect(dupBadge).toBeVisible();
+    await expect(dupBadge).toHaveAttribute("title", /Matched CLAIM-01/);
 
     const checkboxes = page.locator("input[type='checkbox']");
     await expect(checkboxes).toHaveCount(3);
@@ -287,8 +301,12 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
     await expect(addRulesBtn).toBeVisible();
     await expect(addRulesBtn).toBeEnabled();
 
-    // Verify source quote excerpt highlight
-    await expect(page.locator("mark:has-text('Never use unverified superlatives')")).toBeVisible();
+    // Exact highlighted text matching each draft's source_quote
+    const marks = page.locator("mark");
+    await expect(marks).toHaveCount(3);
+    await expect(marks.nth(0)).toHaveText(quote1);
+    await expect(marks.nth(1)).toHaveText(quote2);
+    await expect(marks.nth(2)).toHaveText(quote3);
 
     await assertNoHorizontalOverflow(page, "Step 3 Review Modal");
     await assertCleanText(page);

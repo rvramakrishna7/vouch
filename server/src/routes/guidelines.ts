@@ -115,8 +115,9 @@ guidelinesRouter.post(
         code: string;
         category: string;
         text: string;
+        version: number;
       }>(
-        "SELECT id, code, category, text FROM rules WHERE organization_id = $1 AND status != 'archived' ORDER BY code ASC",
+        "SELECT id, code, category, text, version FROM rules WHERE organization_id = $1 AND status != 'archived' ORDER BY code ASC",
         [orgId],
       );
 
