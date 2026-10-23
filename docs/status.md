@@ -214,6 +214,35 @@ Submit, approval, lock rules, and audit API (S10a) completed and live:
     9. Fetched activity timeline (`GET /api/contents/:id/activity`): 9 chronological events returned with actor names ("Arjun Mehta", "Neha Iyer") and details
     10. Verified lock rule: attempt to create revision on approved content returned 409 `{ error: "approved_locked" }`.
 
+Approval workflow UI, Activity timeline, and Audit log (S10b) completed and live:
+- Server fixes & test coverage:
+  - `server/src/routes/contents.ts`:
+    - `POST /:id/revisions`: updates content status back to `draft` if creator creates revision while `in_review` (withdraws submission). Approved content remains 409 `approved_locked`.
+    - `GET /:id/activity`: finding.resolve details properly reads `payload.replacement_text` and `payload.dismiss_reason`.
+    - `GET /:id/activity`: deduplicates comment item when already covered by a `content.request_changes` or `content.approve` event with same revision_id and text.
+  - `server/src/routes/audit.ts`:
+    - Compound cursor `(at, id)` using `<iso>|<id>` format. Filter condition `(ae.at, ae.id) < ($at, $id::uuid)` prevents skips and duplicates across identical timestamps.
+  - Vitest suite: 83/83 tests passing across 11 test files (`test/approval.test.ts` with 14 tests).
+- Client UI (`client/src/pages/ContentDetailPage.tsx`, `AuditPage.tsx`, `Header.tsx`, `StatusBadge.tsx`):
+  - Status badge near title: Draft (grey), In review (blue), Changes requested (amber), Approved (emerald).
+  - Creator owner actions: "Submit for review" button; disabled with warning hint when latest revision has not been reviewed; updates status to "In review" on click.
+  - Reviewer actions: Reviewer Decision panel on `in_review` content with "Approve" and "Request changes" buttons.
+    - Request changes expands textarea (min 5 chars); button disabled until valid; updates content status and displays amber banner with reviewer feedback.
+    - Approve on 409 `override_required` opens modal displaying open high-severity issues and AI status, with required override reason textarea (min 10 chars); button disabled until valid; "Approve with override" saves decision with override.
+  - Approved state: displays green banner "Approved by <name> on <date> (Override: <reason>)"; cleanly suppresses all editing and action buttons (Run review, Submit, Preview, Manual edit, Accept/Edit/Dismiss/Change).
+  - Activity timeline section: renders chronological timeline from `GET /activity` with readable labels ("Created content", "Ran Vouch review", "Submitted for review", "Requested changes", "Approved with override", "Accepted fix", "Edited", "Dismissed", "Created revision n"), formatted timestamps, actor names, and contextual details. Refreshes automatically after any user action.
+  - Audit log screen (`/audit`):
+    - Accessible via header navigation link for `reviewer` and `brand_manager`; hidden for `creator` (who gets redirected if accessed directly).
+    - Features append-only notice, action filter dropdown, full table (Time, Actor, Action, Entity, Details), and "Load more" button powered by compound cursor pagination.
+  - Definition of Done verification:
+    - 3/3 Playwright E2E tests passing headless (`resolve.spec.ts` + `approval.spec.ts`).
+    - 7 step screenshots saved in `client/e2e/screenshots/`.
+    - `assertCleanText` verifies no raw HTML entities on any page.
+- Live API verification on Vercel deployment (`https://vouch-ten-iota.vercel.app`):
+  - Authenticated as Reviewer (Neha Iyer).
+  - `GET /api/contents/00d76e9e-ecc2-4024-957f-81a4eb94aefd/activity`: 8 events returned in exact order.
+  - `GET /api/audit?limit=3` and `GET /api/audit?limit=3&before=<cursor>`: compound cursor pagination verified without overlap.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -242,13 +271,13 @@ Verified row counts:
 | S7 | AI adapter (Gemini + Groq fallback + zod) and embeddings | 23 Oct | Done: AI adapter, Groq fallback, zod validation, embed:facts (8/8 facts), live GET /api/ai/status verified |
 | S8 | Claim Ledger pipeline (extract, retrieve, verify, validate), latency, stability & UI | 23 Oct | Done: S8a (server pipeline), S8a.1 (latency optimization), S8a.2 (stable verdicts: Groq primary for ledger, regulated guard, numeric cross-check, DEC-022), S8b (Claim Ledger UI) |
 | S9 | Findings UI, fixes (accept/edit/dismiss), revisions + diff | 24 Oct | Done: S9a (server resolutions & revisions API), S9a.1 (literal replacements), S9a.2 (fact-checking replacements), S9b (resolution UI, preview modal, word-level diff, manual edit, interactive revision history), S9b.1 (fix resolve UI "open" status & 8/8 Playwright e2e checks), S9c (UI polish, HTML entity cleanup, stale-review highlights fix) |
-| S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | In progress: S10a (submit, approval, lock rules, activity & audit API) done; next S10b (approval workflow & audit UI) |
-| S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Pending |
+| S10 | Reviewer approval workflow, override, audit log screen | 24 Oct | Done: S10a (submit, approval, lock rules, activity & audit API) and S10b (approval UI, override dialog, activity timeline, /audit page, E2E tests) |
+| S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Next |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Pending |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S10b: Reviewer approval workflow UI (Submit for review, Approve / Request changes with override prompt) and Audit log screen.
+S11: Guideline import: AI-drafted rules → manager approves (PDF / text upload, AI extracts candidate rules with rationale, Brand Manager reviews/accepts/edits).
 
 ## Open issues
 none
