@@ -42,15 +42,44 @@ const TONE_ALL_CAPS_ALLOWLIST = new Set([
   "ISO",
 ]);
 
-function buildPreferredRegex(termStr: string): RegExp {
-  if (termStr.toLowerCase() === "aqualeaf") {
-    return /(?<!\w)aqua[\s-]?leaf(?!\w)/gi;
+function parseVariantsFromNote(note?: string | null): string[] {
+  if (!note) return [];
+  const matches = note.matchAll(/"([^"]+)"|'([^']+)'/g);
+  const variants: string[] = [];
+  for (const m of matches) {
+    const val = (m[1] ?? m[2] ?? "").trim();
+    if (val) variants.push(val);
   }
-  const words = termStr.split(/[\s-]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
-  const pattern = words
-    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("[\\s-]?");
-  return new RegExp(`(?<!\\w)${pattern}(?!\\w)`, "gi");
+  return variants;
+}
+
+function buildPreferredRegex(termStr: string, note?: string | null): RegExp {
+  const listedVariants = parseVariantsFromNote(note);
+  const candidates = new Set<string>();
+
+  // Add the base term itself so casing/spacing variants of the base term are caught
+  candidates.add(termStr);
+  for (const v of listedVariants) {
+    candidates.add(v);
+  }
+
+  // Build regex patterns for all candidates
+  const patterns: string[] = [];
+  for (const candidate of candidates) {
+    const words = candidate.split(/[\s-]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
+    if (words.length > 0) {
+      const pattern = words
+        .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("[\\s-]?");
+      patterns.push(pattern);
+    }
+  }
+
+  if (patterns.length === 0) {
+    return new RegExp(`(?<!\\w)${termStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\w)`, "gi");
+  }
+
+  return new RegExp(`(?<!\\w)(?:${patterns.join("|")})(?!\\w)`, "gi");
 }
 
 export function runRuleChecks(
@@ -90,7 +119,7 @@ export function runRuleChecks(
 
     if (term.type === "preferred") {
       // Preferred: flag only spelling variants (different case or inserted space/hyphen), not the exact term
-      const regex = buildPreferredRegex(term.term);
+      const regex = buildPreferredRegex(term.term, term.note);
       let match: RegExpExecArray | null;
 
       while ((match = regex.exec(text)) !== null) {

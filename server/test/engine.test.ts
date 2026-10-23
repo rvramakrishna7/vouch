@@ -158,6 +158,39 @@ describe("runRuleChecks pure engine", () => {
     expect(exactAquaLeafFinding).toBeUndefined();
   });
 
+  it("Northwind test: flags Northwind preferred term variants from terms note", () => {
+    const nwRules: RuleInput[] = [
+      {
+        code: "TERM-01",
+        category: "terminology",
+        severity: "medium",
+        text: "Brand name is always Northwind (never NorthWind or North-Wind)",
+        status: "active",
+      },
+    ];
+    const nwTerms: TermInput[] = [
+      {
+        term: "Northwind",
+        type: "preferred",
+        rule_code: "TERM-01",
+        replacement: "Northwind",
+        note: 'Exact spelling; flag variants like "NorthWind" or "North-Wind"',
+      },
+    ];
+
+    const variantText = "Welcome to NorthWind and North-Wind platforms.";
+    const findings = runRuleChecks(variantText, { rules: nwRules, terms: nwTerms });
+    expect(findings).toHaveLength(2);
+    expect(findings[0].span_text).toBe("NorthWind");
+    expect(findings[0].suggested_fix).toBe("Northwind");
+    expect(findings[1].span_text).toBe("North-Wind");
+    expect(findings[1].suggested_fix).toBe("Northwind");
+
+    const exactText = "Welcome to Northwind platform.";
+    const exactFindings = runRuleChecks(exactText, { rules: nwRules, terms: nwTerms });
+    expect(exactFindings).toHaveLength(0);
+  });
+
   it("flags GREAT bottle!! with an ALL CAPS and an exclamation finding", () => {
     const text = "This is a GREAT bottle!!";
     const findings = runRuleChecks(text, { rules, terms });
