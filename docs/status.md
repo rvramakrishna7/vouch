@@ -291,7 +291,7 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - 100% of drafts matched `source_text.slice(start, end) === source_quote`.
     - Every run detected duplicates: Superlatives -> `CLAIM-01`, Numbers/durations -> `CLAIM-03`, Trademark spelling -> `TERM-01`. Zero writes on live DB.
 
-- Final polish and cleanup (S12a) completed and live:
+- Final polish, cleanup, and test suite isolation (S12a, S12a.2) completed:
   - Generic preferred term regex: Removed hardcoded "aqualeaf" from `server/src/engine/ruleChecks.ts`. Variant detection is driven dynamically from the organization's `terms` table (`term` + listed quoted variants in `note`). Verified with unit tests for Aqualeaf and Northwind Labs. No hardcoded brand strings remain in `server/src/engine`.
   - Cold start pre-warm: `LoginPage.tsx` triggers a fire-and-forget `GET /api/health` on mount, warming up the serverless environment before demo login clicks.
   - Guideline import progress and formatting: While drafting, progress text cycles through "Reading guideline…" -> "Drafting rules…" -> "Checking duplicates…". Excerpt display cleans markdown syntax (`**`, `__`, `#`, leading `- `) while keeping source offsets and highlight `<mark>` verbatim.
@@ -300,6 +300,13 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - "Hide sign-ins" checkbox added (checked by default), filtering `auth.*` events server-side (`?exclude=auth`).
     - Dynamic `GET /api/audit/actions` endpoint returns distinct org-scoped actions.
     - Action column renders human-readable action title with raw action code below; layout verified at 1280px and 1440px.
+  - Test suite isolation (S12a.2):
+    - Suite made independent of live database state containing the seed data:
+      - `server/test/brand-kit.test.ts`: computes next free code dynamically from database and cleans up created rows in `afterAll`.
+      - `server/test/db.test.ts`: verifies existence of every seed rule, fact, and term from `docs/demo-brand.md` rather than assuming static exact counts.
+      - `server/test/guidelines.test.ts`: computes expected next codes dynamically from database.
+    - Verified with two consecutive runs of the full server test suite (`npm test --prefix server`): both runs passed 100% (12/12 files, 98/98 tests), with exact rule count invariant verified before Run 1 (13), after Run 1 (13), and after Run 2 (13). Zero database mutation outside test-scoped cleanup.
+    - Client build and full Playwright E2E suite passed 5/5.
 
 Verified row counts:
 - schema_migrations: 4
