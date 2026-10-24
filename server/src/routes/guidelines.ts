@@ -7,6 +7,7 @@ import pool from "../db/pool.js";
 import { AiUnavailableError } from "../ai/types.js";
 import {
   runGuidelineDraftPipeline,
+  invalidateOrgRuleEmbeddingCache,
   ALLOWED_CATEGORIES,
   ALLOWED_SEVERITIES,
 } from "../guidelines/pipeline.js";
@@ -135,7 +136,7 @@ guidelinesRouter.post(
         [orgId],
       );
 
-      const result = await runGuidelineDraftPipeline(guidelineText, existingRules);
+      const result = await runGuidelineDraftPipeline(guidelineText, existingRules, orgId);
       return res.json(result);
     } catch (err: any) {
       if (err instanceof AiUnavailableError || err?.status === 503 || err?.message?.includes("AI_FORCE_FAIL")) {
@@ -221,6 +222,7 @@ guidelinesRouter.post(
       });
 
       await client.query("COMMIT");
+      invalidateOrgRuleEmbeddingCache(orgId);
       return res.status(201).json({ rules: insertedRules });
     } catch (err) {
       await client.query("ROLLBACK");

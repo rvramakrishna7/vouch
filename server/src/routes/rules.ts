@@ -3,6 +3,7 @@ import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import pool from "../db/pool.js";
+import { invalidateOrgRuleEmbeddingCache } from "../guidelines/pipeline.js";
 
 export const rulesRouter = Router();
 
@@ -137,6 +138,7 @@ rulesRouter.post("/", requireRole("brand_manager"), async (req: Request, res: Re
     });
 
     await client.query("COMMIT");
+    invalidateOrgRuleEmbeddingCache(orgId);
     return res.status(201).json(createdRule);
   } catch (err) {
     await client.query("ROLLBACK");
@@ -201,6 +203,7 @@ rulesRouter.patch("/:id", requireRole("brand_manager"), async (req: Request, res
       payload: { changes: parseResult.data, version: updated.version },
     });
 
+    invalidateOrgRuleEmbeddingCache(orgId);
     return res.json(updated);
   } catch (err) {
     console.error("PATCH /api/rules/:id error:", err);

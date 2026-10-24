@@ -7,6 +7,7 @@ export interface RequestTimingStore {
   dbTime: number;
   aiTime: number;
   embedTime: number;
+  aiAttempts?: string[];
 }
 
 export const timingStorage = new AsyncLocalStorage<RequestTimingStore>();
@@ -22,6 +23,7 @@ export function timingMiddleware(
     dbTime: 0,
     aiTime: 0,
     embedTime: 0,
+    aiAttempts: [],
   };
 
   timingStorage.run(store, () => {
@@ -41,11 +43,12 @@ export function timingMiddleware(
 
         let parts: string[];
         if (isDesignatedBreakdown) {
-          // Requirement 2: Explicit breakdown (auth, db, ai, embed, total)
+          // Requirement 2 & 4: Explicit breakdown (auth, db, ai, [attempts], embed, total)
           parts = [
             `auth;dur=${store.authTime.toFixed(1)}`,
             `db;dur=${dbDuration.toFixed(1)}`,
             `ai;dur=${store.aiTime.toFixed(1)}`,
+            ...(store.aiAttempts && store.aiAttempts.length > 0 ? store.aiAttempts : []),
             `embed;dur=${store.embedTime.toFixed(1)}`,
             `total;dur=${totalDuration.toFixed(1)}`,
           ];
@@ -53,7 +56,8 @@ export function timingMiddleware(
           parts = [
             ...(store.authTime > 0 ? [`auth;dur=${store.authTime.toFixed(1)}`] : []),
             `db;dur=${dbDuration.toFixed(1)}`,
-            ...(store.aiTime > 0 ? [`ai;dur=${store.aiTime.toFixed(1)}`] : []),
+            `ai;dur=${store.aiTime.toFixed(1)}`,
+            ...(store.aiAttempts && store.aiAttempts.length > 0 ? store.aiAttempts : []),
             ...(store.embedTime > 0 ? [`embed;dur=${store.embedTime.toFixed(1)}`] : []),
             `total;dur=${totalDuration.toFixed(1)}`,
           ];
