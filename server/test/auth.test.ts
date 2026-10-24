@@ -130,4 +130,15 @@ describe.runIf(hasDb)("Auth routes and middleware", () => {
 
     expect(afterCount).toBe(beforeCount + 1);
   });
+
+  it("demo login with org: 'northwind-labs' logs in as Northwind user", async () => {
+    const res = await request(app)
+      .post("/api/auth/demo")
+      .send({ role: "creator", org: "northwind-labs" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBeDefined();
+    expect(res.body.user.role).toBe("creator");
+    expect(res.body.organization.name).toBe("Northwind Labs");
+  });
 });

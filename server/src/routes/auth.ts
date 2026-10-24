@@ -16,6 +16,7 @@ const loginSchema = z.object({
 
 const demoSchema = z.object({
   role: z.enum(["brand_manager", "creator", "reviewer"]),
+  org: z.string().optional().default("aqualeaf"),
 });
 
 // POST /api/auth/login
@@ -103,7 +104,9 @@ authRouter.post("/demo", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "invalid_input" });
   }
 
-  const { role } = parseResult.data;
+  const { role, org } = parseResult.data;
+  const orgSlug =
+    org === "northwind" || org === "northwind-labs" ? "northwind-labs" : org;
 
   try {
     const { rows } = await pool.query<{
@@ -117,9 +120,9 @@ authRouter.post("/demo", async (req: Request, res: Response) => {
       `SELECT u.id, u.organization_id, u.name, u.email, u.role, o.name AS organization_name
        FROM users u
        JOIN organizations o ON o.id = u.organization_id
-       WHERE o.slug = 'aqualeaf' AND u.role = $1
+       WHERE o.slug = $2 AND u.role = $1
        LIMIT 1`,
-      [role],
+      [role, orgSlug],
     );
 
     if (rows.length === 0) {
