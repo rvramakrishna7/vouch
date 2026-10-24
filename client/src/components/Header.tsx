@@ -101,8 +101,8 @@ export function Header() {
       <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
         <div className="flex items-center gap-6 min-w-0">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Vouch
+            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center">
+              Vouch<span className="text-emerald-600 dark:text-emerald-500">.</span>
             </span>
             {organization && (
               <>

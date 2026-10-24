@@ -492,6 +492,9 @@ test.describe("Vouch Live Acceptance Suite (TEST-001..011)", () => {
     await page.waitForSelector("text=Approved by Neha Iyer", { timeout: 20000 });
     await expect(page.locator("span", { hasText: "Approved" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit Text Manually" })).toHaveCount(0);
+    // S13a Part 0 & Step 5: Assert the Draft Body text is visible after approval
+    await expect(page.locator("text=now 40% lighter").first()).toBeVisible();
+    await expect(page.locator("text=Revision").first()).toBeVisible();
     await takeScreenshot(page, "test007", "content_approved_locked", 1280, "light");
 
     // -------------------------------------------------------------------------
@@ -511,6 +514,9 @@ test.describe("Vouch Live Acceptance Suite (TEST-001..011)", () => {
     await page.getByRole("link", { name: "Audit log" }).click();
     await page.waitForURL("**/audit");
     await page.waitForSelector("h1:has-text('Audit log')");
+    // Wait for the audit table rows to finish loading before taking screenshot (no "Loading" in screenshots)
+    await page.waitForSelector("tbody tr", { timeout: 15000 });
+    await expect(page.locator("text=Loading audit events")).toHaveCount(0);
     await assertCleanText(page);
     await assertNoLayoutOverflow(page);
     await takeScreenshot(page, "test008", "audit_log_page", 1280, "light");

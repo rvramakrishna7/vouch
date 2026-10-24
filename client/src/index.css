@@ -283,7 +283,73 @@ html.dark .bg-red-100 {
   }
 }
 
-/* Touch targets (AGENTS.md 7f.2): at least 40 px high on phone. */
+/*
+ * 6b. Login heading animated dot:
+ * Red (unsupported) -> Amber (needs judgement) -> Brand Green (supported)
+ * ~0.5s per colour, stays green. No loop. Respects prefers-reduced-motion.
+ */
+@keyframes vouch-dot-cycle {
+  0% {
+    color: #dc2626; /* red-600 */
+  }
+  33% {
+    color: #dc2626; /* red-600 */
+  }
+  34% {
+    color: #d97706; /* amber-600 */
+  }
+  66% {
+    color: #d97706; /* amber-600 */
+  }
+  67% {
+    color: #059669; /* emerald-600 */
+  }
+  100% {
+    color: #059669; /* emerald-600 */
+  }
+}
+
+.login-dot-animated {
+  display: inline-block;
+  color: #059669; /* Default / final brand green */
+  animation: vouch-dot-cycle 1.5s ease-in-out forwards;
+}
+
+html.dark .login-dot-animated {
+  color: #10b981; /* emerald-500 in dark mode */
+}
+
+@keyframes vouch-dot-cycle-dark {
+  0% {
+    color: #f87171; /* red-400 */
+  }
+  33% {
+    color: #f87171;
+  }
+  34% {
+    color: #fbbf24; /* amber-400 */
+  }
+  66% {
+    color: #fbbf24;
+  }
+  67% {
+    color: #10b981; /* emerald-500 */
+  }
+  100% {
+    color: #10b981;
+  }
+}
+
+html.dark .login-dot-animated {
+  animation: vouch-dot-cycle-dark 1.5s ease-in-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-dot-animated {
+    animation: none !important;
+  }
+}
+
 @media (max-width: 767px) {
   a:not(.touch-auto),
   button:not(.touch-auto),

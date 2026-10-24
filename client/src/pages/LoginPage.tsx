@@ -74,10 +74,10 @@ export function LoginPage() {
         <ThemeToggle />
       </div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-          Vouch
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center justify-center">
+          Vouch<span className="login-dot-animated" data-testid="login-dot">.</span>
         </h1>
-        <p className="mt-1 text-base font-semibold text-slate-700">
+        <p className="mt-1 text-base font-semibold text-slate-700 dark:text-slate-300">
           Every claim, backed by proof.
         </p>
         <p className="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
@@ -223,6 +223,9 @@ export function LoginPage() {
                 Sign in
               </Button>
             </form>
+            <p className="mt-4 text-xs text-slate-500 dark:text-slate-400 text-center">
+              Demo workspace: use the one-click buttons above. Team sign-up and invites are on the roadmap.
+            </p>
           </div>
         </div>
       </div>
