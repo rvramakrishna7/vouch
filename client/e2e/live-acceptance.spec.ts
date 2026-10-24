@@ -293,42 +293,90 @@ test.describe("Vouch Live Acceptance Suite (TEST-001..011)", () => {
     await takeScreenshot(page, "test004", "review_complete_overview", 1280, "light");
 
     // Verify AI and rule engine disclosure
-    await expect(page.locator("text=Reviewed by:")).toContainText("vouch-rules-v1");
-    await expect(page.locator("text=Reviewed by:")).toContainText("AI");
+    const disclosureEl = page.locator("text=Reviewed by:");
+    await expect(disclosureEl).toContainText("vouch-rules-v1");
+    // Disclosure shows provider and model (Groq or Gemini)
+    await expect(disclosureEl).toHaveText(/Reviewed by:.*(rules|groq|gemini)/i);
 
-    // Verify Claim Ledger findings
-    // 1. "India's No.1": Unsupported, citing CLAIM-01
+    // Fetch review details from API to print verdict table and check latency
+    const tokenFromStorage = await page.evaluate(() => localStorage.getItem("vouch_token") || sessionStorage.getItem("vouch_token"));
+    const latestReviewRes = await request.get(`${API_BASE}/api/contents/${contentId}/reviews/latest`, {
+      headers: { Authorization: `Bearer ${tokenFromStorage}` },
+    });
+    const latestReviewData = await latestReviewRes.json();
+    const reviewMeta = latestReviewData.review || {};
+    const reviewFindings: any[] = latestReviewData.findings || [];
+
+    // Calculate review duration
+    let reviewMs = 0;
+    if (reviewMeta.started_at && reviewMeta.finished_at) {
+      reviewMs = Math.round(
+        new Date(reviewMeta.finished_at).getTime() - new Date(reviewMeta.started_at).getTime()
+      );
+    }
+
+    // Print verdict table for this run
+    console.log("\n=================== VERDICT TABLE ===================");
+    console.log(`Provider: ${reviewMeta.provider || "N/A"} | Model: ${reviewMeta.model || "N/A"} | Duration: ${reviewMs} ms`);
+    console.log("------------------------------------------------------------------------------------------------");
+    console.log(
+      "Quote".padEnd(36) + " | " +
+      "Verdict".padEnd(14) + " | " +
+      "Citation".padEnd(10) + " | " +
+      "Provider/Model".padEnd(25) + " | " +
+      "Review ms"
+    );
+    console.log("------------------------------------------------------------------------------------------------");
+    for (const f of reviewFindings) {
+      const quote = (f.span_text || "").replace(/\n/g, " ").slice(0, 34);
+      const verdict = (f.verdict || "null").slice(0, 14);
+      const citation = (f.rule_code || f.fact_code || "none").slice(0, 10);
+      const provModel = `${reviewMeta.provider || ""}/${reviewMeta.model || ""}`.slice(0, 25);
+      console.log(
+        quote.padEnd(36) + " | " +
+        verdict.padEnd(14) + " | " +
+        citation.padEnd(10) + " | " +
+        provModel.padEnd(25) + " | " +
+        reviewMs
+      );
+    }
+    console.log("=====================================================\n");
+
+    // Verify Claim Ledger findings strictly per docs/demo-brand.md (Task S12b.1):
+    // 1. "India's No.1": Unsupported + CLAIM-01
     const no1Card = page.locator('[id^="finding-card-"]').filter({ hasText: "CLAIM-01" }).first();
     await expect(no1Card).toBeVisible();
     await expect(no1Card).toContainText("CLAIM-01");
+    await expect(no1Card).toContainText(/Unsupported/i);
 
-    // 2. "eco-friendly": citing CLAIM-02
+    // 2. "eco-friendly": Unsupported or Needs human judgement + CLAIM-02
     const ecoCard = page.locator('[id^="finding-card-"]').filter({ hasText: "CLAIM-02" }).first();
     await expect(ecoCard).toBeVisible();
     await expect(ecoCard).toContainText("CLAIM-02");
 
-    // 3. "Rated 4.8": Outdated, citing F-03
+    // 3. "Rated 4.8": Outdated + F-03
     const ratedCard = page.locator('[id^="finding-card-"]').filter({ hasText: "F-03" }).first();
     await expect(ratedCard).toBeVisible();
     await expect(ratedCard).toContainText("Outdated");
     await expect(ratedCard).toContainText("F-03");
 
-    // 4. "48 hours": Contradicted, citing F-15
+    // 4. "48 hours": Contradicted + F-15
     const coldCard = page.locator('[id^="finding-card-"]').filter({ hasText: "F-15" }).first();
     await expect(coldCard).toBeVisible();
     await expect(coldCard).toContainText("Contradicted");
     await expect(coldCard).toContainText("F-15");
 
-    // 5. "40% lighter": Supported, citing F-12 (if extracted as distinct claim)
-    const lighterCard = page.locator('[id^="finding-card-"]').filter({ hasText: "F-12" });
-    if ((await lighterCard.count()) > 0) {
-      await expect(lighterCard.first()).toContainText("Supported");
-    }
+    // 5. "40% lighter": Supported + F-12 (strictly asserted without if)
+    const lighterCard = page.locator('[id^="finding-card-"]').filter({ hasText: "F-12" }).first();
+    await expect(lighterCard).toBeVisible();
+    await expect(lighterCard).toContainText("Supported");
+    await expect(lighterCard).toContainText("F-12");
 
     // Verify Rule-based checks (TEST-005)
     // 6. "#stayhydrated" ACC-02 CamelCase hashtag
     const hashtagFinding = page.locator('[id^="finding-card-"]').filter({ hasText: "ACC-02" }).first();
     await expect(hashtagFinding).toBeVisible();
+    await expect(hashtagFinding).toContainText("ACC-02");
 
     await takeScreenshot(page, "test005", "claim_ledger_cards", 1280, "light");
 
@@ -471,7 +519,7 @@ test.describe("Vouch Live Acceptance Suite (TEST-001..011)", () => {
     // TEST-011: Tenant Isolation API verification
     // -------------------------------------------------------------------------
     console.log("TEST-011: Tenant isolation API check...");
-    // Direct API call to backend without auth -> 401
+    // 1. Direct API call to backend without auth -> 401
     const unauthContentRes = await request.get(`${API_BASE}/api/contents/${contentId}`);
     expect(unauthContentRes.status()).toBe(401);
 
@@ -480,6 +528,34 @@ test.describe("Vouch Live Acceptance Suite (TEST-001..011)", () => {
 
     const unauthFactsRes = await request.get(`${API_BASE}/api/facts`);
     expect(unauthFactsRes.status()).toBe(401);
+
+    // 2. Real cross-tenant check with Northwind user:
+    // Log in as Northwind demo user
+    const nwAuthRes = await request.post(`${API_BASE}/api/auth/demo`, {
+      data: { role: "creator", org: "northwind-labs" },
+    });
+    expect(nwAuthRes.status()).toBe(200);
+    const nwAuthData = await nwAuthRes.json();
+    const nwToken = nwAuthData.token;
+    expect(nwToken).toBeDefined();
+    expect(nwAuthData.organization?.name).toBe("Northwind Labs");
+
+    // Northwind user tries to GET Aqualeaf content id -> must be 404
+    const nwGetContentRes = await request.get(`${API_BASE}/api/contents/${contentId}`, {
+      headers: { Authorization: `Bearer ${nwToken}` },
+    });
+    expect(nwGetContentRes.status()).toBe(404);
+
+    // Northwind user lists rules -> must NOT contain any Aqualeaf rule text or codes
+    const nwRulesRes = await request.get(`${API_BASE}/api/rules`, {
+      headers: { Authorization: `Bearer ${nwToken}` },
+    });
+    expect(nwRulesRes.status()).toBe(200);
+    const nwRules = await nwRulesRes.json();
+    const nwRulesString = JSON.stringify(nwRules);
+    expect(nwRulesString).not.toContain("CLAIM-01");
+    expect(nwRulesString).not.toContain("Aqualeaf");
+    expect(nwRulesString).not.toContain("No.1");
 
     // -------------------------------------------------------------------------
     // PHASE 2: 375px Dark Theme Responsive Run

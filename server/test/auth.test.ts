@@ -141,4 +141,13 @@ describe.runIf(hasDb)("Auth routes and middleware", () => {
     expect(res.body.user.role).toBe("creator");
     expect(res.body.organization.name).toBe("Northwind Labs");
   });
+
+  it("demo login with unknown org returns 400 invalid_input", async () => {
+    const res = await request(app)
+      .post("/api/auth/demo")
+      .send({ role: "creator", org: "unknown-org-slug" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_input");
+  });
 });

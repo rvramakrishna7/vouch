@@ -29,12 +29,12 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: /live-acceptance\.spec\.ts/,
+      testIgnore: [/live-acceptance\.spec\.ts/, /measure_live_flow\.spec\.ts/],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "live",
-      testMatch: /live-acceptance\.spec\.ts/,
+      testMatch: [/live-acceptance\.spec\.ts/, /measure_live_flow\.spec\.ts/],
       timeout: 180000,
       use: {
         ...devices["Desktop Chrome"],
