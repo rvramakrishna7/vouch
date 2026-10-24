@@ -317,6 +317,16 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - Comprehensive E2E test suite `client/e2e/responsive.spec.ts` (7/7 tests passed) with full-page screenshots captured across all 5 widths in `client/e2e/screenshots/`.
     - Zero regressions across existing E2E suites: `approval.spec.ts`, `guideline.spec.ts`, and `resolve.spec.ts` all passed (5/5).
 
+  - App-wide polish, speed breakdown, design system button and single controls (S12d):
+    - Server-Timing breakdown (`auth;dur=..., db;dur=..., ai;dur=..., embed;dur=..., total;dur=...`) implemented across `/api/auth/demo`, `/api/guidelines/draft`, and `/api/contents/:id/reviews`.
+    - Cold-start pre-warm: `GET /api/health?warm=1` executes `SELECT 1` through the database pool; `LoginPage` pings it on mount; added `.github/workflows/keep-warm.yml` to ping every 5 minutes.
+    - Guideline draft optimization: parallelized uncached rules embedding with AI draft call (`Promise.all`), reused cached embeddings from `ruleEmbeddingCache`, and embedded drafted rules in a single batch.
+    - Design system: centralized shared `Button` component with standard variants (primary, secondary, danger, ghost, outline) and sizes (sm, md), minimum 40px touch targets, fixed padding-left >= 12px (`px-3.5`/`px-4`), and immediate pending states (`loadingText`).
+    - Single controls (AGENTS 7e.7): ensured exactly ONE "Run Vouch review" button is visible when revision is created and review is stale; eliminated duplicate controls.
+    - Plural helper (AGENTS 7e.8): added `plural(n, singular, pluralForm)` helper; verified zero occurrences of `(s)` or `1 rules` in `client/src`.
+    - Server `.env.example`: comprehensively documented every environment variable read by server code with descriptive comments and placeholder values.
+    - Test suites: 98/98 server tests passing (12/12 files) with zero ad-hoc database mutation; all client E2E suites passing (12/12 tests: responsive 7/7, resolve 2/2, approval 1/1, guideline 2/2).
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -349,6 +359,7 @@ Verified row counts:
 | S11 | Guideline import: AI-drafted rules → manager approves | 24 Oct | Done: S11 (server pipeline & apply API, Brand Kit import modal, live 3-run benchmark, 5/5 E2E tests) |
 | S12a | Final polish, test isolation & cleanup | 24 Oct | Done: S12a.2 (test isolation across runs, zero ad-hoc mutation, 100% server suite pass) |
 | S12c | Responsive design (phone, tablet, desktop) | 24 Oct | Done: S12c (responsive layouts, e2e suite 7/7, zero regressions across existing suites 5/5) |
+| S12d | App-wide polish, speed breakdown & design system | 24 Oct | Done: S12d (Server-Timing breakdown, keep-warm, shared Button, single Run review control, plural helper, 98 server tests & 12 e2e passed) |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Next |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
