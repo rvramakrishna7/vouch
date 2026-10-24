@@ -31,6 +31,7 @@ app.use(
       return callback(null, false);
     },
     exposedHeaders: ["Server-Timing"],
+    maxAge: 86400, // Cache preflight for 24 hours (86400 seconds)
   }),
 );
 

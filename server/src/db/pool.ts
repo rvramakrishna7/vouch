@@ -60,6 +60,11 @@ if (process.env.VERCEL) {
   }
 }
 
+// Eagerly connect at module load to warm pool connection
+pool.query("SELECT 1").catch((err) => {
+  console.warn("[pool] eager connection warmup:", (err as any)?.message);
+});
+
 // Instrument pool.query to track database time in timingStorage
 const rawPoolQuery = pool.query.bind(pool);
 pool.query = (async (...args: any[]) => {

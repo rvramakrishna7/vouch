@@ -1,7 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import multer from "multer";
 import path from "node:path";
-import mammoth from "mammoth";
 import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
@@ -27,27 +25,42 @@ contentsRouter.use(requireAuth);
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 4 * 1024 * 1024, // 4 MB
-  },
-});
+let uploadCache: any = null;
+async function getUpload() {
+  if (!uploadCache) {
+    const { default: multer } = await import("multer");
+    uploadCache = {
+      multer,
+      upload: multer({
+        storage: multer.memoryStorage(),
+        limits: {
+          fileSize: 4 * 1024 * 1024, // 4 MB
+        },
+      }),
+    };
+  }
+  return uploadCache;
+}
 
 // POST /api/contents/extract (creator only)
 contentsRouter.post(
   "/extract",
   requireRole("creator"),
-  (req: Request, res: Response, next) => {
-    upload.single("file")(req, res, (err) => {
-      if (err) {
-        if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-          return res.status(413).json({ error: "file_too_large" });
+  async (req: Request, res: Response, next) => {
+    try {
+      const { multer, upload } = await getUpload();
+      upload.single("file")(req, res, (err: any) => {
+        if (err) {
+          if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({ error: "file_too_large" });
+          }
+          return res.status(400).json({ error: "invalid_input", details: err.message });
         }
-        return res.status(400).json({ error: "invalid_input", details: err.message });
-      }
-      next();
-    });
+        next();
+      });
+    } catch (e) {
+      next(e);
+    }
   },
   async (req: Request, res: Response) => {
     const file = req.file;
@@ -70,6 +83,7 @@ contentsRouter.post(
     }
 
     try {
+      const { default: mammoth } = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       const text = result.value;
       return res.json({
