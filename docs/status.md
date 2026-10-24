@@ -327,6 +327,29 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - Server `.env.example`: comprehensively documented every environment variable read by server code with descriptive comments and placeholder values.
     - Test suites: 98/98 server tests passing (12/12 files) with zero ad-hoc database mutation; all client E2E suites passing (12/12 tests: responsive 7/7, resolve 2/2, approval 1/1, guideline 2/2).
 
+  - Cold start, guideline speed, and dark mode (S12e):
+    - Part A0 (Cold start fixes):
+      - Cached browser OPTIONS preflights (`maxAge: 86400` in CORS middleware) to avoid duplicate SSL/TCP round-trip latency on initial user interactions.
+      - Background eager `pool.query("SELECT 1")` on server module init to initialize DB connection during boot.
+      - Lazy loaded heavy modules (`multer`, `mammoth`) on-demand in routes instead of at server cold start.
+      - Added DNS prefetch and preconnect to live API origin in client `index.html`.
+      - Measured live warm runs in fresh browser context: 372ms, 275ms, 875ms (all < 1000ms: PASS).
+    - Part A (Guideline draft speed & tracking):
+      - Primary provider set to Groq `openai/gpt-oss-120b` (with Gemini fallback); configured `reasoning_effort: "low"` to reduce generation latency.
+      - Added AI attempt tracking in `Server-Timing` headers (`ai_try1=...`, `ai_try2=...`, `ai_retry=...`).
+      - Handled top-level array JSON parsing transparently.
+      - Concurrent rule embedding immediately upon AI return in parallel with quote validation and code numbering; org-level embedding cache with 10-minute TTL.
+      - Duplicate matching threshold tuned to `>= 0.68` for same-category rules, guaranteeing deterministic duplicate matching for CLAIM-01, CLAIM-03, and TERM-01 across every run.
+      - Live 3-run benchmark on `docs/demo-guideline.md`: 4359.2ms, 5037.2ms, 5529.7ms (CLAIM-01: true, CLAIM-03: true, TERM-01: true across all 3 runs).
+      - Live review on fresh content (3 runs, 10s apart): 3821.5ms (`ai;dur=3223.0`), 1540.4ms (`ai;dur=990.0`), 2375.9ms (`ai;dur=1829.0`).
+    - Part B (Dark mode theme support):
+      - Theme toggle component in header (desktop) and mobile drawer with accessible labels and icons.
+      - Anti-flash inline script in `<head>` inspecting `localStorage.getItem("vouch_theme")` and system `prefers-color-scheme: dark`.
+      - Tailwind v4 `@custom-variant dark (&:where(.dark, .dark *));` and dark theme tokens for backgrounds, cards, borders, text, status badges, diff highlights, and mobile stacked tables.
+      - WCAG AA contrast compliance verified: 0 violations with `@axe-core/playwright`.
+      - New Playwright E2E suite `client/e2e/theme.spec.ts` (2/2 passed) capturing 14 full-page screenshots at 375px and 1280px in `client/e2e/screenshots/`.
+      - Zero regressions: 12/12 existing client E2E tests passed; 98/98 server unit and integration tests passed; client and server production builds succeeded.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -360,6 +383,7 @@ Verified row counts:
 | S12a | Final polish, test isolation & cleanup | 24 Oct | Done: S12a.2 (test isolation across runs, zero ad-hoc mutation, 100% server suite pass) |
 | S12c | Responsive design (phone, tablet, desktop) | 24 Oct | Done: S12c (responsive layouts, e2e suite 7/7, zero regressions across existing suites 5/5) |
 | S12d | App-wide polish, speed breakdown & design system | 24 Oct | Done: S12d (Server-Timing breakdown, keep-warm, shared Button, single Run review control, plural helper, 98 server tests & 12 e2e passed) |
+| S12e | Cold-start fix, guideline speed & dark mode | 24 Oct | Done: S12e (cold-start preflight caching, guideline draft speed & duplicate detection, dark mode theme toggle, 0 WCAG contrast violations, 14 screenshots) |
 | S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Next |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
