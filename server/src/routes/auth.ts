@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { signToken } from "../auth/jwt.js";
+import { timingStorage } from "../middleware/timing.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import pool from "../db/pool.js";
 
@@ -48,6 +49,7 @@ authRouter.post("/login", async (req: Request, res: Response) => {
     }
 
     const user = rows[0];
+    const authStart = performance.now();
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
       return res.status(401).json({ error: "invalid_credentials" });
@@ -58,6 +60,10 @@ authRouter.post("/login", async (req: Request, res: Response) => {
       org: user.organization_id,
       role: user.role,
     });
+    const timingStore = timingStorage.getStore();
+    if (timingStore) {
+      timingStore.authTime += performance.now() - authStart;
+    }
 
     await logAudit({
       organizationId: user.organization_id,
@@ -121,11 +127,16 @@ authRouter.post("/demo", async (req: Request, res: Response) => {
     }
 
     const user = rows[0];
+    const authStart = performance.now();
     const token = signToken({
       sub: user.id,
       org: user.organization_id,
       role: user.role,
     });
+    const timingStore = timingStorage.getStore();
+    if (timingStore) {
+      timingStore.authTime += performance.now() - authStart;
+    }
 
     await logAudit({
       organizationId: user.organization_id,
@@ -181,6 +192,7 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
     }
 
     const user = rows[0];
+    const authStart = performance.now();
     return res.json({
       user: {
         id: user.id,

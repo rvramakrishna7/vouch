@@ -35,11 +35,11 @@ export function BrandKitPage() {
 
       {/* Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-4 sm:space-x-6 overflow-x-auto" aria-label="Brand Kit Tabs">
+        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto" aria-label="Brand Kit Tabs">
           <button
             type="button"
             onClick={() => setActiveTab("rules")}
-            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap pb-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap px-3.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === "rules"
                 ? "border-slate-900 text-slate-900"
                 : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
@@ -50,7 +50,7 @@ export function BrandKitPage() {
           <button
             type="button"
             onClick={() => setActiveTab("facts")}
-            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap pb-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap px-3.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === "facts"
                 ? "border-slate-900 text-slate-900"
                 : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
@@ -61,7 +61,7 @@ export function BrandKitPage() {
           <button
             type="button"
             onClick={() => setActiveTab("terms")}
-            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap pb-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`min-h-11 md:min-h-0 inline-flex items-end whitespace-nowrap px-3.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === "terms"
                 ? "border-slate-900 text-slate-900"
                 : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"

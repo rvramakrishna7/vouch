@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
+import { Button } from "../../components/Button.js";
 
 export interface Fact {
   id: string;
@@ -135,13 +136,14 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
           Approved facts with verifiable sources and expiry dates. Claims in marketing copy cite these numbered facts.
         </p>
         {isBrandManager && (
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             onClick={() => setShowAddForm(!showAddForm)}
-            className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-1.5 rounded-lg transition-colors"
           >
             {showAddForm ? "Cancel" : "+ Add fact"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -206,20 +208,24 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowAddForm(false)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={submittingAdd}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              loading={submittingAdd}
+              loadingText="Saving…"
             >
-              {submittingAdd ? "Saving…" : "Save Fact"}
-            </button>
+              Save Fact
+            </Button>
           </div>
         </form>
       )}
@@ -231,13 +237,15 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
             <h3 className="text-sm font-bold text-slate-900">
               Editing Fact: <span className="font-mono text-blue-700">{editingFact.code}</span>
             </h3>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingFact(null)}
-              className="text-xs text-slate-500 hover:text-slate-800"
+              className="min-h-0 py-1 text-slate-500 hover:text-slate-800"
             >
               Close
-            </button>
+            </Button>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">Statement</label>
@@ -281,20 +289,24 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingFact(null)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={submittingEdit}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              loading={submittingEdit}
+              loadingText="Updating…"
             >
-              {submittingEdit ? "Updating…" : "Update Fact"}
-            </button>
+              Update Fact
+            </Button>
           </div>
         </form>
       )}
@@ -350,13 +362,15 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
                     </td>
                     {isBrandManager && (
                       <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleStartEdit(fact)}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                          className="min-h-0 py-1 text-blue-600 hover:text-blue-800"
                         >
                           Edit
-                        </button>
+                        </Button>
                       </td>
                     )}
                   </tr>

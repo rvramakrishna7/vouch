@@ -567,7 +567,7 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
 
     // Dialog opens on 409 override_required
     await page.waitForSelector("text=Approval Requires Override");
-    await expect(page.locator("text=1 high-severity issue(s) still open")).toBeVisible();
+    await expect(page.locator("text=1 high-severity issue still open")).toBeVisible();
 
     const approveWithOverrideBtn = page.locator("button:has-text('Approve with override')");
     await expect(approveWithOverrideBtn).toBeDisabled();

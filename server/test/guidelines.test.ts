@@ -341,12 +341,15 @@ Always refer to the product as an insulated steel bottle.
     }));
 
     // Orthogonal embeddings -> cosine = 0 (< 0.70)
+    let callOffset = 0;
     setEmbedderHook(async (texts: string[]) => {
-      return texts.map((_, idx) => {
+      const res = texts.map((_, idx) => {
         const v = Array.from({ length: 768 }, () => 0);
-        v[idx % 768] = 1;
+        v[(callOffset + idx) % 768] = 1;
         return v;
       });
+      callOffset += texts.length;
+      return res;
     });
 
     const res = await request(app)

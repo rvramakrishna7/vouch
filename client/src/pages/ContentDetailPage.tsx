@@ -4,7 +4,8 @@ import { diffWords } from "diff";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { useAuth } from "../auth/AuthContext.js";
-import { formatDate } from "../lib/format.js";
+import { formatDate, plural } from "../lib/format.js";
+import { Button } from "../components/Button.js";
 
 interface Revision {
   id: string;
@@ -746,7 +747,7 @@ export function ContentDetailPage() {
       return item.details.body;
     }
     if (item.action === "review.run" && item.details?.findings_count !== undefined) {
-      return `${item.details.findings_count} finding(s) · AI: ${item.details.ai_status ?? "ok"}`;
+      return `${plural(item.details.findings_count, "finding")} · AI: ${item.details.ai_status ?? "ok"}`;
     }
     if (item.action === "revision.create" && item.details?.mode) {
       return `Mode: ${item.details.mode}`;
@@ -807,6 +808,9 @@ export function ContentDetailPage() {
   );
   const isStaleReview = Boolean(
     review && latestRevision && review.revision_id !== latestRevision.id,
+  );
+  const showStaleBanner = Boolean(
+    (isStaleReview || staleReviewAlert || createdRevisionBanner) && latestRevision,
   );
   const isCreatorOwner = Boolean(
     user?.role === "creator" && content && user?.id === content.created_by,
@@ -997,13 +1001,14 @@ export function ContentDetailPage() {
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
           <div className="flex-1 min-w-0">{badge}</div>
           {canResolve && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => startChange(finding.id)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-900 underline cursor-pointer shrink-0"
             >
               Change
-            </button>
+            </Button>
           )}
         </div>
       );
@@ -1030,24 +1035,27 @@ export function ContentDetailPage() {
               className="flex-1 min-w-[10rem] text-xs font-mono px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               autoFocus
             />
-            <button
+            <Button
               type="button"
+              size="sm"
               disabled={isResolving || !editInputText.trim()}
+              loading={isResolving}
+              loadingText="Saving…"
               onClick={() => handleResolve(finding.id, "edit", editInputText)}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg disabled:opacity-50 cursor-pointer shrink-0"
             >
-              {isResolving ? "Saving..." : "Save"}
-            </button>
-            <button
+              Save
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setActiveEditId(null);
                 if (isChanging) setActiveChangeId(null);
               }}
-              className="px-2 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer shrink-0"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -1070,26 +1078,29 @@ export function ContentDetailPage() {
               className="flex-1 min-w-[10rem] text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               autoFocus
             />
-            <button
+            <Button
               type="button"
+              size="sm"
               disabled={isResolving || !isValid}
+              loading={isResolving}
+              loadingText="Saving…"
               onClick={() =>
                 handleResolve(finding.id, "dismiss", undefined, dismissInputReason)
               }
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg disabled:opacity-50 cursor-pointer shrink-0"
             >
-              {isResolving ? "Saving..." : "Confirm"}
-            </button>
-            <button
+              Confirm
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setActiveDismissId(null);
                 if (isChanging) setActiveChangeId(null);
               }}
-              className="px-2 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer shrink-0"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -1099,39 +1110,46 @@ export function ContentDetailPage() {
     return (
       <div className="pt-2 border-t border-slate-100 flex items-center flex-wrap gap-2">
         {finding.suggested_fix && (
-          <button
+          <Button
             type="button"
+            size="sm"
             disabled={isResolving}
+            loading={isResolving}
+            loadingText="Accepting…"
             onClick={() => handleResolve(finding.id, "accept")}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+            className="!bg-emerald-600 hover:!bg-emerald-700"
           >
-            {isResolving ? "Accepting..." : "Accept fix"}
-          </button>
+            Accept fix
+          </Button>
         )}
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           disabled={isResolving}
           onClick={() => startEdit(finding)}
-          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
         >
           Edit
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           disabled={isResolving}
           onClick={() => startDismiss(finding)}
-          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
         >
           Dismiss
-        </button>
+        </Button>
         {isChanging && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setActiveChangeId(null)}
-            className="text-xs text-slate-400 hover:text-slate-600 underline ml-auto cursor-pointer"
+            className="ml-auto"
           >
             Keep current
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -1166,47 +1184,44 @@ export function ContentDetailPage() {
         <div className="w-full sm:w-auto shrink-0 flex flex-col items-stretch sm:items-end gap-1.5 self-start sm:self-auto">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
             {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (
-              <button
+              <Button
                 type="button"
+                size="md"
                 disabled={submitting || !isLatestReview}
+                loading={submitting}
+                loadingText="Submitting…"
                 onClick={handleSubmitForReview}
-                className="h-11 sm:h-10 w-full sm:w-auto px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                className="!bg-blue-600 hover:!bg-blue-700 w-full sm:w-auto"
               >
-                {submitting ? "Submitting…" : "Submit for review"}
-              </button>
+                Submit for review
+              </Button>
             )}
 
-            {!isApproved && !isInReview && (
-              <button
+            {!isApproved && !isInReview && !showStaleBanner && (
+              <Button
                 type="button"
+                size="md"
                 disabled={loading || reviewRunning || !latestRevision}
+                loading={reviewRunning}
+                loadingText="Reviewing…"
                 onClick={handleRunReview}
-                className="h-11 sm:h-10 w-full sm:w-auto px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm inline-flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                className="w-full sm:w-auto"
               >
-                {reviewRunning ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Reviewing…</span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4 text-slate-300"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <span>Run Vouch review</span>
-                  </>
-                )}
-              </button>
+                <svg
+                  className="w-4 h-4 text-slate-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>Run Vouch review</span>
+              </Button>
             )}
           </div>
 
@@ -1300,21 +1315,26 @@ export function ContentDetailPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => setRequestChangesOpen(!requestChangesOpen)}
-                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer"
+                className="!bg-amber-500 hover:!bg-amber-600 !text-white !border-amber-500"
               >
                 Request changes
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 disabled={approving}
+                loading={approving}
+                loadingText="Approving…"
                 onClick={() => handleApprove(false)}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="!bg-emerald-600 hover:!bg-emerald-700"
               >
-                {approving ? "Approving…" : "Approve"}
-              </button>
+                Approve
+              </Button>
             </div>
           </div>
 
@@ -1335,24 +1355,27 @@ export function ContentDetailPage() {
                   {requestChangesComment.trim().length} / 5 chars min
                 </span>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => {
                       setRequestChangesOpen(false);
                       setRequestChangesComment("");
                     }}
-                    className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    size="sm"
                     disabled={requestingChanges || requestChangesComment.trim().length < 5}
+                    loading={requestingChanges}
+                    loadingText="Submitting…"
                     onClick={handleRequestChanges}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
                   >
-                    {requestingChanges ? "Submitting…" : "Confirm request changes"}
-                  </button>
+                    Confirm request changes
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1360,35 +1383,8 @@ export function ContentDetailPage() {
         </div>
       )}
 
-      {/* Revision Created Banner (Requirement 5) */}
-      {createdRevisionBanner && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-sm text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </span>
-            <span className="font-semibold">
-              Revision {createdRevisionBanner.n} created. Run Vouch review again to check the new text.
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setCreatedRevisionBanner(null);
-              handleRunReview();
-            }}
-            disabled={reviewRunning}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
-          >
-            Run review →
-          </button>
-        </div>
-      )}
-
-      {/* Stale Review Notice (when review is for an older revision) */}
-      {(isStaleReview || staleReviewAlert) && latestRevision && (
+      {/* Stale Review Notice (when review is for an older revision or new revision created) */}
+      {showStaleBanner && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2.5">
             <svg
@@ -1405,17 +1401,25 @@ export function ContentDetailPage() {
               />
             </svg>
             <span className="font-semibold">
-              These findings are for Revision {reviewedRevN}. Run Vouch review to check Revision {latestRevision.n}.
+              {createdRevisionBanner
+                ? `Revision ${createdRevisionBanner.n} created. These findings are for Revision ${reviewedRevN || (createdRevisionBanner.n - 1)}.`
+                : `These findings are for Revision ${reviewedRevN}. Run Vouch review to check Revision ${latestRevision?.n}.`}
             </span>
           </div>
-          <button
+          <Button
             type="button"
-            onClick={handleRunReview}
+            size="sm"
+            loading={reviewRunning}
+            loadingText="Reviewing…"
             disabled={reviewRunning}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer shrink-0"
+            onClick={() => {
+              setCreatedRevisionBanner(null);
+              handleRunReview();
+            }}
+            className="!bg-amber-600 hover:!bg-amber-700 shrink-0"
           >
             Run Vouch review →
-          </button>
+          </Button>
         </div>
       )}
 
@@ -1602,17 +1606,10 @@ export function ContentDetailPage() {
             <div className="flex items-center gap-2 text-slate-600">
               <span className="w-2 h-2 rounded-full bg-slate-300" />
               <span className="font-medium text-slate-700">Not reviewed yet.</span>
-              <span className="text-xs text-slate-400 hidden sm:inline">
-                Run review to inspect brand claims, terminology, and tone against your Brand Kit.
-              </span>
             </div>
-            <button
-              type="button"
-              onClick={handleRunReview}
-              className="text-xs font-semibold text-slate-900 underline hover:text-blue-600 cursor-pointer"
-            >
-              Run review now →
-            </button>
+            <span className="text-xs text-slate-500 font-medium">
+              Click 'Run Vouch review' above to check against your Brand Kit.
+            </span>
           </div>
         )}
       </div>
@@ -1815,28 +1812,26 @@ export function ContentDetailPage() {
               </div>
 
               <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:flex sm:items-center gap-2 sm:shrink-0">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={handleOpenManualEdit}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                  className="!bg-slate-800 hover:!bg-slate-700 !text-slate-200 !border-slate-700"
                 >
                   Edit text manually
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  size="sm"
                   disabled={readyCount === 0 || previewLoading}
+                  loading={previewLoading}
+                  loadingText="Previewing…"
                   onClick={handlePreviewChanges}
-                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-sm"
+                  className="!bg-emerald-500 hover:!bg-emerald-400 !text-slate-950 font-bold"
                 >
-                  {previewLoading ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                      <span>Previewing...</span>
-                    </>
-                  ) : (
-                    <span>Preview changes →</span>
-                  )}
-                </button>
+                  Preview changes →
+                </Button>
               </div>
             </div>
           )}
@@ -1851,7 +1846,7 @@ export function ContentDetailPage() {
                     {claimFindings.length}
                   </span>
                   {isStaleReview && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
                       From Revision {reviewedRevN}
                     </span>
                   )}
@@ -2023,7 +2018,7 @@ export function ContentDetailPage() {
                     {ruleFindings.length}
                   </span>
                   {isStaleReview && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
                       From Revision {reviewedRevN}
                     </span>
                   )}
@@ -2144,7 +2139,7 @@ export function ContentDetailPage() {
               Timeline of revisions, reviews, submissions, and approvals.
             </p>
           </div>
-          <span className="text-xs text-slate-400 font-medium">{activity.length} event(s)</span>
+          <span className="text-xs text-slate-400 font-medium">{plural(activity.length, "event")}</span>
         </div>
 
         {activityLoading && activity.length === 0 ? (
@@ -2241,29 +2236,25 @@ export function ContentDetailPage() {
             </div>
 
             <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="md"
                 disabled={applyingFixes}
                 onClick={() => setPreviewModalOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="md"
                 disabled={applyingFixes}
+                loading={applyingFixes}
+                loadingText="Creating revision…"
                 onClick={handleApplyFixes}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
               >
-                {applyingFixes ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Creating revision...</span>
-                  </>
-                ) : (
-                  <span>Create revision {nextRevisionN}</span>
-                )}
-              </button>
+                Create revision {nextRevisionN}
+              </Button>
             </div>
           </div>
         </div>
@@ -2314,33 +2305,29 @@ export function ContentDetailPage() {
             </div>
 
             <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="md"
                 disabled={savingManual}
                 onClick={() => setManualModalOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="md"
                 disabled={
                   savingManual ||
                   manualBody === latestRevision.body ||
                   !manualBody.trim()
                 }
+                loading={savingManual}
+                loadingText="Saving revision…"
                 onClick={handleSaveManual}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
               >
-                {savingManual ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Saving revision...</span>
-                  </>
-                ) : (
-                  <span>Save as revision {nextRevisionN}</span>
-                )}
-              </button>
+                Save as revision {nextRevisionN}
+              </Button>
             </div>
           </div>
         </div>
@@ -2372,7 +2359,7 @@ export function ContentDetailPage() {
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
                 <span className="font-bold block">Conditions requiring override:</span>
                 {typeof overrideHighCount === "number" && overrideHighCount > 0 && (
-                  <p>• {overrideHighCount} high-severity issue(s) still open</p>
+                  <p>• {plural(overrideHighCount, "high-severity issue")} still open</p>
                 )}
                 {overrideAiStatus && overrideAiStatus !== "ok" && (
                   <p>• AI check was unavailable</p>
@@ -2398,21 +2385,25 @@ export function ContentDetailPage() {
             </div>
 
             <div className="shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => setOverrideDialogOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 disabled={approving || overrideReason.trim().length < 10}
+                loading={approving}
+                loadingText="Approving…"
                 onClick={() => handleApprove(true)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="!bg-emerald-600 hover:!bg-emerald-700"
               >
-                {approving ? "Approving…" : "Approve with override"}
-              </button>
+                Approve with override
+              </Button>
             </div>
           </div>
         </div>

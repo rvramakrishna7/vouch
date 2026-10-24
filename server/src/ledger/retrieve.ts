@@ -1,6 +1,7 @@
 import { type Pool } from "pg";
 import { embed } from "../ai/adapter.js";
 import { ensureFactEmbeddings } from "../ai/factEmbeddings.js";
+import { timingStorage } from "../middleware/timing.js";
 
 export interface FactCandidate {
   id: string;
@@ -32,7 +33,12 @@ export async function retrieveCandidateFacts(
     await ensureFactEmbeddings(organizationId);
 
     // 2. Embed all sentences in one batch call
+    const embedStart = performance.now();
     const vectors = await embed(sentenceTexts);
+    const timingStore = timingStorage.getStore();
+    if (timingStore) {
+      timingStore.embedTime += performance.now() - embedStart;
+    }
 
     // 3. Query top 3 facts per sentence using pgvector <=> cosine distance
     const candidateMap = new Map<string, FactCandidate & { dist: number }>();

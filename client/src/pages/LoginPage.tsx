@@ -1,16 +1,17 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type Role } from "../auth/AuthContext.js";
+import { Button } from "../components/Button.js";
 import { getRoleHome } from "../components/ProtectedLayout.js";
 
 export function LoginPage() {
   const { loginDemo, login, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Cold start pre-warm: ping GET /api/health once on mount (fire and forget, no UI)
+  // Cold start pre-warm: ping GET /api/health?warm=1 once on mount (fire and forget, no UI)
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || "";
-    fetch(`${apiUrl}/api/health`).catch(() => {});
+    fetch(`${apiUrl}/api/health?warm=1`).catch(() => {});
   }, []);
 
   const [activeRole, setActiveRole] = useState<Role | null>(null);
@@ -101,7 +102,7 @@ export function LoginPage() {
               type="button"
               disabled={submitting}
               onClick={() => handleDemoLogin("creator")}
-              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left group disabled:opacity-50"
+              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
               <div className="flex items-center justify-between w-full">
                 <span className="font-semibold text-slate-900 group-hover:text-blue-700">
@@ -109,7 +110,7 @@ export function LoginPage() {
                 </span>
                 {submitting && activeRole === "creator" && (
                   <span className="text-xs text-blue-600 font-medium animate-pulse">
-                    Connecting…
+                    Signing in…
                   </span>
                 )}
               </div>
@@ -122,7 +123,7 @@ export function LoginPage() {
               type="button"
               disabled={submitting}
               onClick={() => handleDemoLogin("reviewer")}
-              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left group disabled:opacity-50"
+              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
               <div className="flex items-center justify-between w-full">
                 <span className="font-semibold text-slate-900 group-hover:text-purple-700">
@@ -130,7 +131,7 @@ export function LoginPage() {
                 </span>
                 {submitting && activeRole === "reviewer" && (
                   <span className="text-xs text-purple-600 font-medium animate-pulse">
-                    Connecting…
+                    Signing in…
                   </span>
                 )}
               </div>
@@ -143,7 +144,7 @@ export function LoginPage() {
               type="button"
               disabled={submitting}
               onClick={() => handleDemoLogin("brand_manager")}
-              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left group disabled:opacity-50"
+              className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
               <div className="flex items-center justify-between w-full">
                 <span className="font-semibold text-slate-900 group-hover:text-emerald-700">
@@ -151,7 +152,7 @@ export function LoginPage() {
                 </span>
                 {submitting && activeRole === "brand_manager" && (
                   <span className="text-xs text-emerald-600 font-medium animate-pulse">
-                    Connecting…
+                    Signing in…
                   </span>
                 )}
               </div>
@@ -206,13 +207,17 @@ export function LoginPage() {
                 />
               </div>
 
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                size="md"
                 disabled={submitting}
-                className="w-full flex justify-center items-center min-h-11 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 disabled:opacity-50"
+                loading={submitting && activeRole === null}
+                loadingText="Signing in…"
+                className="w-full"
               >
-                {submitting && activeRole === null ? "Signing in…" : "Sign in"}
-              </button>
+                Sign in
+              </Button>
             </form>
           </div>
         </div>
