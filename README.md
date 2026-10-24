@@ -39,6 +39,7 @@ Brand teams publish claims ("India's No.1", "eco-friendly", "keeps drinks cold f
 6. **Append-only audit log and activity timeline.** Every action (review, fix, revision, submit, decision, rule change) is recorded with actor and details; the database rejects updates and deletes on the audit table.
 7. **Guideline import.** A Brand Manager pastes (or uploads as DOCX) a written brand guideline; AI drafts numbered rules, each with the exact source sentence highlighted, and flags rules that duplicate existing ones. Nothing is saved until the manager approves.
 8. **AI disclosure on every review**: which rule engine, AI provider and model produced the findings, and how long it took.
+9. **Works everywhere**: responsive from phone (375 px) to desktop, with light and dark themes (follows the system setting, toggle in the header) checked for WCAG AA contrast.
 
 ## Why the AI can be trusted here: the model never has the final word
 
@@ -73,16 +74,20 @@ db/migrations/*.sql → Supabase Postgres + pgvector (Mumbai)
 
 **AI providers (free tiers):** Groq `openai/gpt-oss-120b` (primary for the Claim Ledger, temperature 0), Google Gemini `gemini-3.5-flash-lite` (fallback with timeout; primary for guideline drafting), Gemini `gemini-embedding-001` (768-dim embeddings). Provider failures (429/5xx/timeouts) fall back automatically.
 
+**Performance (measured on the live deployment):** one-click login to the content list in under 1 s, a full review in about 1.5-4 s, guideline drafting in about 5 s. `Server-Timing` headers break every request down into auth / db / ai / embed; a scheduled ping keeps the serverless function warm.
+
 **Security and data:** bcrypt passwords, JWT (8 h) in sessionStorage, role checks on every route, `organization_id` filter on every query (other organisations' ids return 404), Row Level Security enabled on all tables, append-only audit trigger, CORS limited to the client origin, secrets only in environment variables, uploads limited to 4 MB.
 
 ## Tests
 
-- **Server:** Vitest + Supertest, ~100 tests across 12 files, including citation validation with mocked AI output, AI fallback and outage behaviour, tenant isolation, approval and lock rules, guideline import, and audit immutability.
-- **Client:** Playwright end-to-end tests for the resolve, approval and guideline-import flows, plus a responsive suite that checks every page at 375, 768, 1024, 1280 and 1440 px for overflow, touch-target size and clean text.
+- **Server:** Vitest + Supertest, 100 tests across 12 files, including citation validation with mocked AI output, AI fallback and outage behaviour, tenant isolation, approval and lock rules, guideline import, and audit immutability.
+- **Client (mocked API):** Playwright end-to-end tests for the resolve, approval and guideline-import flows; a responsive suite that checks every page at 375, 768, 1024, 1280 and 1440 px for overflow, touch-target size and clean text; and a theme suite that runs axe-core WCAG AA contrast checks on every page and modal in light and dark mode.
+- **Live acceptance:** a Playwright run against the deployed app with the real AI that walks TEST-001..011 from `docs/plan.md` end to end (Brand Kit edits, DOCX upload, review verdicts, fixes, revisions, approval with override, audit log, cross-tenant 404), at 1280 px light and 375 px dark.
 
 ```bash
 npm test --prefix server        # needs DATABASE_URL in server/.env
-npm run test:e2e --prefix client
+npm run test:e2e --prefix client   # mocked API
+npm run test:live --prefix client  # against the deployed app (creates demo data)
 ```
 
 ## Run locally
