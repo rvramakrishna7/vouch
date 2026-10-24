@@ -7,7 +7,7 @@ Built by team **RESTART CODE** (R V Ramakrishna) for the TechCircuit hackathon, 
 | | |
 |---|---|
 | **Live app** | https://vouch-app-beta.vercel.app |
-| **API** | https://vouch-ten-iota.vercel.app (health: `/api/health`) |
+| **API** | https://vouch-ten-iota.vercel.app/api/health (health check; the API has no home page of its own) |
 | **Repository** | https://github.com/rvramakrishna7/vouch |
 
 No sign-up needed: the login page has one-click demo buttons for each role (fictional demo brand "Aqualeaf").
