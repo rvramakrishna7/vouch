@@ -16,7 +16,7 @@ const loginSchema = z.object({
 
 const demoSchema = z.object({
   role: z.enum(["brand_manager", "creator", "reviewer"]),
-  org: z.string().optional().default("aqualeaf"),
+  org: z.enum(["aqualeaf", "northwind-labs", "northwind"]).optional().default("aqualeaf"),
 });
 
 // POST /api/auth/login
