@@ -157,8 +157,19 @@ export function runRuleChecks(
         term.type === "banned"
           ? "Banned term"
           : "Regulated term: allowed only with a specific supporting fact";
-      if (term.note) {
-        reason += `: ${term.note}`;
+      if (term.note && term.note.trim()) {
+        const trimmedNote = term.note.trim();
+        // If note already starts with or equals the default message (case-insensitive), avoid duplicating
+        const lowerNote = trimmedNote.toLowerCase();
+        if (
+          term.type === "regulated" &&
+          (lowerNote === "allowed only with a specific supporting fact" ||
+            lowerNote.startsWith("allowed only with a specific supporting fact"))
+        ) {
+          // Do not append redundant note
+        } else {
+          reason += `: ${trimmedNote}`;
+        }
       }
 
       let match: RegExpExecArray | null;

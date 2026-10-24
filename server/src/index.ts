@@ -40,7 +40,23 @@ app.use(express.json({ limit: "4mb" }));
 app.get("/api/health", async (req: Request, res: Response) => {
   if (req.query.warm === "1") {
     try {
-      await pool.query("SELECT 1");
+      // 1. Pre-import heavy dynamically loaded libraries and modules
+      await Promise.allSettled([
+        import("multer"),
+        import("mammoth"),
+        import("./ledger/pipeline.js"),
+        import("./guidelines/pipeline.js"),
+        import("./engine/ruleChecks.js"),
+      ]);
+
+      // 2. Cheap queries on tables used by these routes to prime connection & query plans
+      await Promise.allSettled([
+        pool.query("SELECT 1"),
+        pool.query("SELECT id FROM findings LIMIT 1"),
+        pool.query("SELECT id FROM contents LIMIT 1"),
+        pool.query("SELECT id FROM revisions LIMIT 1"),
+        pool.query("SELECT id FROM rules LIMIT 1"),
+      ]);
     } catch (err) {
       console.warn("[health] warm DB ping failed:", (err as any)?.message);
     }

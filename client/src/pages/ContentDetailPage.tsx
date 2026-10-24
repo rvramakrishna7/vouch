@@ -4,7 +4,7 @@ import { diffWords } from "diff";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { useAuth } from "../auth/AuthContext.js";
-import { formatDate, plural } from "../lib/format.js";
+import { formatDate, plural, cleanReason } from "../lib/format.js";
 import { Button } from "../components/Button.js";
 
 interface Revision {
@@ -402,8 +402,44 @@ export function ContentDetailPage() {
     text?: string,
     reason?: string,
   ) => {
+    // Optimistic UI update: immediately show resolution on finding card
+    const previousFindings = findings;
+    const targetFinding = findings.find((f) => f.id === findingId);
+    if (targetFinding) {
+      const optimisticResolution =
+        action === "accept"
+          ? "accepted"
+          : action === "edit"
+          ? "edited"
+          : "dismissed";
+      const optimisticReplacement =
+        action === "accept"
+          ? targetFinding.suggested_fix
+          : action === "edit"
+          ? text ?? null
+          : null;
+      const optimisticDismiss = action === "dismiss" ? reason ?? null : null;
+
+      setFindings((prev) =>
+        prev.map((f) =>
+          f.id === findingId
+            ? {
+                ...f,
+                resolution: optimisticResolution,
+                replacement_text: optimisticReplacement,
+                dismiss_reason: optimisticDismiss,
+              }
+            : f,
+        ),
+      );
+    }
+
+    setActiveEditId(null);
+    setActiveDismissId(null);
+    setActiveChangeId(null);
     setResolvingFindingId(findingId);
     setActionError(null);
+
     try {
       const res = await apiFetch<{
         finding?: Finding;
@@ -441,13 +477,12 @@ export function ContentDetailPage() {
         ),
       );
 
-      setActiveEditId(null);
-      setActiveDismissId(null);
-      setActiveChangeId(null);
-      setResolvingFindingId(null);
       void fetchActivity();
     } catch (err) {
-      console.error("Resolution failed:", err);
+      console.error("Resolution failed, rolling back:", err);
+      // Roll back to previous findings on error
+      setFindings(previousFindings);
+
       if (
         err instanceof ApiError &&
         (err.status === 409 || err.message === "stale_review")
@@ -494,6 +529,7 @@ export function ContentDetailPage() {
     if (!id || !latestRevision) return;
     setPreviewLoading(true);
     setActionError(null);
+    setPreviewModalOpen(true);
     try {
       const res = await apiFetch<{
         body: string;
@@ -504,9 +540,9 @@ export function ContentDetailPage() {
         body: JSON.stringify({ mode: "preview" }),
       });
       setPreviewData(res);
-      setPreviewModalOpen(true);
     } catch (err) {
       console.error("Preview failed:", err);
+      setPreviewModalOpen(false);
       if (
         err instanceof ApiError &&
         (err.status === 409 || err.message === "stale_review")
@@ -1962,7 +1998,7 @@ export function ContentDetailPage() {
 
                       {/* Reason */}
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {finding.reason}
+                        {cleanReason(finding.reason)}
                       </p>
 
                       {/* Suggested Fix */}
@@ -2108,7 +2144,7 @@ export function ContentDetailPage() {
                       )}
 
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug">
-                        {finding.reason}
+                        {cleanReason(finding.reason)}
                       </p>
 
                       {finding.suggested_fix && (
@@ -2186,7 +2222,7 @@ export function ContentDetailPage() {
       </div>
 
       {/* Preview Changes Modal (Requirement 4) */}
-      {previewModalOpen && previewData && latestRevision && (
+      {previewModalOpen && latestRevision && (
         <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
           <div className="bg-white sm:rounded-2xl max-w-2xl w-full shadow-2xl sm:border border-slate-200 overflow-hidden sm:my-8 flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
             <div className="shrink-0 p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -2208,33 +2244,42 @@ export function ContentDetailPage() {
             </div>
 
             <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
-                  Diff Preview
-                </span>
-                <WordDiff
-                  oldText={latestRevision.body}
-                  newText={previewData.body}
-                />
-              </div>
-
-              {/* Skipped fixes list */}
-              {previewData.skipped && previewData.skipped.length > 0 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1.5">
-                  <span className="font-bold block">
-                    Skipped fixes ({previewData.skipped.length}):
-                  </span>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {previewData.skipped.map((s: any, idx: number) => (
-                      <li key={idx}>
-                        <span className="font-mono font-semibold">
-                          "{s.span_text}"
-                        </span>
-                        : overlaps another fix
-                      </li>
-                    ))}
-                  </ul>
+              {!previewData ? (
+                <div className="py-12 text-center text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-slate-400 border-t-slate-800 rounded-full animate-spin" />
+                  <p className="text-sm font-medium">Preparing preview…</p>
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
+                      Diff Preview
+                    </span>
+                    <WordDiff
+                      oldText={latestRevision.body}
+                      newText={previewData.body}
+                    />
+                  </div>
+
+                  {/* Skipped fixes list */}
+                  {previewData.skipped && previewData.skipped.length > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1.5">
+                      <span className="font-bold block">
+                        Skipped fixes ({previewData.skipped.length}):
+                      </span>
+                      <ul className="list-disc pl-4 space-y-1">
+                        {previewData.skipped.map((s: any, idx: number) => (
+                          <li key={idx}>
+                            <span className="font-mono font-semibold">
+                              "{s.span_text}"
+                            </span>
+                            : overlaps another fix
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -2251,7 +2296,7 @@ export function ContentDetailPage() {
               <Button
                 type="button"
                 size="md"
-                disabled={applyingFixes}
+                disabled={applyingFixes || !previewData}
                 loading={applyingFixes}
                 loadingText="Creating revision…"
                 onClick={handleApplyFixes}

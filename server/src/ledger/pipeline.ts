@@ -228,6 +228,33 @@ export function extractNumberUnitPairs(text: string): Array<{ value: number; uni
   return pairs;
 }
 
+export function buildFindingReason(
+  baseReason: string,
+  guidanceNotes: Array<string | null | undefined>,
+): string {
+  let cleanBase = (baseReason || "").trim();
+  // Strip any pre-existing Guidance: null/undefined from baseReason if present
+  cleanBase = cleanBase.replace(/\s*Guidance:\s*(null|undefined)\b\.?/gi, "").trim();
+
+  const validNotes = guidanceNotes
+    .map((g) => (typeof g === "string" ? g.trim() : ""))
+    .filter(
+      (g) =>
+        g.length > 0 &&
+        g.toLowerCase() !== "null" &&
+        g.toLowerCase() !== "undefined",
+    );
+
+  if (validNotes.length === 0) {
+    return cleanBase;
+  }
+
+  const fullGuidance = validNotes.join(" ").trim();
+  if (!fullGuidance) return cleanBase;
+
+  return cleanBase ? `${cleanBase} Guidance: ${fullGuidance}` : `Guidance: ${fullGuidance}`;
+}
+
 function findQuoteOffsets(
   fullText: string,
   quote: string,
@@ -567,7 +594,13 @@ export async function runClaimLedger(options: {
     let validatedReplacement = validateReplacement(rawClaim.replacement, rawClaim.quote);
     const guidanceNotes: string[] = [];
 
-    if (rawClaim.guidance && rawClaim.guidance.trim()) {
+    if (
+      rawClaim.guidance &&
+      typeof rawClaim.guidance === "string" &&
+      rawClaim.guidance.trim() &&
+      rawClaim.guidance.trim().toLowerCase() !== "null" &&
+      rawClaim.guidance.trim().toLowerCase() !== "undefined"
+    ) {
       guidanceNotes.push(rawClaim.guidance.trim());
     }
 
@@ -589,12 +622,7 @@ export async function runClaimLedger(options: {
       }
     }
 
-    if (guidanceNotes.length > 0) {
-      const fullGuidance = guidanceNotes.join(" ");
-      finalReason = finalReason
-        ? `${finalReason} Guidance: ${fullGuidance}`
-        : `Guidance: ${fullGuidance}`;
-    }
+    finalReason = buildFindingReason(finalReason, guidanceNotes);
 
     validatedFindings.push({
       kind: "claim",

@@ -108,17 +108,17 @@ export function LoginPage() {
               onClick={() => handleDemoLogin("creator")}
               className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
-              <div className="flex items-center justify-between w-full">
-                <span className="font-semibold text-slate-900 group-hover:text-blue-700">
+              <div className="flex items-center justify-between w-full text-left">
+                <span className="font-semibold text-slate-900 group-hover:text-blue-700 text-left">
                   Try as Creator
                 </span>
                 {submitting && activeRole === "creator" && (
-                  <span className="text-xs text-blue-600 font-medium animate-pulse">
+                  <span className="text-xs text-blue-600 font-medium animate-pulse shrink-0">
                     Signing in…
                   </span>
                 )}
               </div>
-              <span className="text-xs text-slate-500 mt-1">
+              <span className="text-xs text-slate-500 mt-1 text-left block w-full">
                 Submit content and fix issues
               </span>
             </button>
@@ -129,17 +129,17 @@ export function LoginPage() {
               onClick={() => handleDemoLogin("reviewer")}
               className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
-              <div className="flex items-center justify-between w-full">
-                <span className="font-semibold text-slate-900 group-hover:text-purple-700">
+              <div className="flex items-center justify-between w-full text-left">
+                <span className="font-semibold text-slate-900 group-hover:text-purple-700 text-left">
                   Try as Reviewer
                 </span>
                 {submitting && activeRole === "reviewer" && (
-                  <span className="text-xs text-purple-600 font-medium animate-pulse">
+                  <span className="text-xs text-purple-600 font-medium animate-pulse shrink-0">
                     Signing in…
                   </span>
                 )}
               </div>
-              <span className="text-xs text-slate-500 mt-1">
+              <span className="text-xs text-slate-500 mt-1 text-left block w-full">
                 Approve or request changes
               </span>
             </button>
@@ -150,17 +150,17 @@ export function LoginPage() {
               onClick={() => handleDemoLogin("brand_manager")}
               className="w-full flex flex-col items-start p-4 border border-slate-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left group disabled:opacity-50 min-h-[40px] cursor-pointer"
             >
-              <div className="flex items-center justify-between w-full">
-                <span className="font-semibold text-slate-900 group-hover:text-emerald-700">
+              <div className="flex items-center justify-between w-full text-left">
+                <span className="font-semibold text-slate-900 group-hover:text-emerald-700 text-left">
                   Try as Brand Manager
                 </span>
                 {submitting && activeRole === "brand_manager" && (
-                  <span className="text-xs text-emerald-600 font-medium animate-pulse">
+                  <span className="text-xs text-emerald-600 font-medium animate-pulse shrink-0">
                     Signing in…
                   </span>
                 )}
               </div>
-              <span className="text-xs text-slate-500 mt-1">
+              <span className="text-xs text-slate-500 mt-1 text-left block w-full">
                 Manage rules, facts and terms
               </span>
             </button>
