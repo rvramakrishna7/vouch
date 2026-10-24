@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type Role } from "../auth/AuthContext.js";
 import { Button } from "../components/Button.js";
+import { ThemeToggle } from "../components/ThemeToggle.js";
 import { getRoleHome } from "../components/ProtectedLayout.js";
 
 export function LoginPage() {
@@ -68,7 +69,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50">
+    <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 relative">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <ThemeToggle />
+      </div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           Vouch
@@ -94,7 +98,7 @@ export function LoginPage() {
           )}
 
           <div className="space-y-3">
-            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               One-click demo evaluation
             </span>
 
@@ -163,7 +167,7 @@ export function LoginPage() {
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-200">
-            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-3">
               Sign in with email
             </span>
 

@@ -303,13 +303,13 @@ export function AuditPage() {
             <tbody className="divide-y divide-slate-100 text-slate-800 font-normal">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     Loading audit events…
                   </td>
                 </tr>
               ) : events.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     No audit events recorded yet.
                   </td>
                 </tr>
@@ -322,18 +322,18 @@ export function AuditPage() {
 
                   return (
                     <tr key={ev.id} className="hover:bg-slate-50/60 transition">
-                      <td data-label="Time" className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs font-mono">
+                      <td data-label="Time" className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs font-mono">
                         {formatDate(ev.at)}
                       </td>
-                      <td data-label="Actor" className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap truncate" title={actorDisplay}>
+                      <td data-label="Actor" className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap truncate" title={actorDisplay}>
                         {actorDisplay}
                       </td>
                       <td data-label="Action" className="px-4 py-3">
                         <div className="flex flex-col gap-0.5 max-w-[130px] lg:max-w-[180px]">
-                          <span className="font-semibold text-xs text-slate-900 truncate" title={readableAction}>
+                          <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 truncate" title={readableAction}>
                             {readableAction}
                           </span>
-                          <span className="font-mono text-xs text-slate-400 truncate" title={ev.action}>
+                          <span className="font-mono text-xs text-slate-500 dark:text-slate-400 truncate" title={ev.action}>
                             {ev.action}
                           </span>
                         </div>

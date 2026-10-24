@@ -1,5 +1,192 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Dark Mode Theme Tokens (Task S12e)
+ * Cohesive neutral palette with high WCAG AA contrast compliance:
+ * Slate-950/900 backgrounds, slate-800 cards, slate-700 borders, slate-100 primary text.
+ */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b1120;
+  color: #f8fafc;
+}
+
+html.dark .bg-white {
+  background-color: #131c31;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/60,
+html.dark .bg-slate-50\/80 {
+  background-color: #0b1120;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #1e293b;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #334155;
+}
+
+html.dark .border-slate-100 {
+  border-color: #1e293b;
+}
+
+html.dark .border-slate-200 {
+  border-color: #27354f;
+}
+
+html.dark .border-slate-300 {
+  border-color: #3e4f6d;
+}
+
+html.dark .text-slate-900 {
+  color: #f8fafc;
+}
+
+html.dark .text-slate-800 {
+  color: #f1f5f9;
+}
+
+html.dark .text-slate-700 {
+  color: #e2e8f0;
+}
+
+html.dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+html.dark .text-slate-500 {
+  color: #94a3b8;
+}
+
+html.dark .text-slate-400 {
+  color: #64748b;
+}
+
+/* Form controls */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark textarea,
+html.dark select {
+  background-color: #0b1120;
+  color: #f8fafc;
+  border-color: #27354f;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Modals & Dialog overlays */
+html.dark .fixed.inset-0.bg-black\/40,
+html.dark .fixed.inset-0.bg-black\/50,
+html.dark .fixed.inset-0.bg-black\/30 {
+  background-color: rgba(0, 0, 0, 0.75);
+}
+
+/* Status Chips and Badges (WCAG AA contrast compliant) */
+html.dark .bg-emerald-100.text-emerald-800 {
+  background-color: #064e3b;
+  color: #a7f3d0;
+  border-color: #047857;
+}
+
+html.dark .bg-amber-100.text-amber-800 {
+  background-color: #78350f;
+  color: #fde68a;
+  border-color: #b45309;
+}
+
+html.dark .bg-red-100.text-red-800 {
+  background-color: #7f1d1d;
+  color: #fecaca;
+  border-color: #b91c1c;
+}
+
+html.dark .bg-purple-100.text-purple-800 {
+  background-color: #581c87;
+  color: #e9d5ff;
+  border-color: #7e22ce;
+}
+
+html.dark .bg-blue-100.text-blue-800,
+html.dark .bg-blue-100.text-blue-700 {
+  background-color: #1e3a8a;
+  color: #bfdbfe;
+  border-color: #1d4ed8;
+}
+
+/* In-text mark highlights */
+html.dark .bg-emerald-100.text-emerald-950 {
+  background-color: rgba(6, 78, 59, 0.45);
+  color: #a7f3d0;
+  text-decoration-color: #34d399;
+}
+
+html.dark .bg-amber-100.text-amber-950 {
+  background-color: rgba(120, 53, 15, 0.45);
+  color: #fde68a;
+  text-decoration-color: #fbbf24;
+}
+
+html.dark .bg-red-100.text-red-950 {
+  background-color: rgba(127, 29, 29, 0.45);
+  color: #fecaca;
+  text-decoration-color: #f87171;
+}
+
+html.dark .bg-purple-100.text-purple-950 {
+  background-color: rgba(88, 28, 135, 0.45);
+  color: #e9d5ff;
+  text-decoration-color: #c084fc;
+}
+
+/* Banners and alerts */
+html.dark .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.25);
+  border-color: #065f46;
+  color: #a7f3d0;
+}
+
+html.dark .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.25);
+  border-color: #92400e;
+  color: #fde68a;
+}
+
+html.dark .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.25);
+  border-color: #991b1b;
+  color: #fecaca;
+}
+
+html.dark .bg-blue-50 {
+  background-color: rgba(30, 58, 138, 0.25);
+  border-color: #1e40af;
+  color: #bfdbfe;
+}
+
+/* Diff highlights */
+html.dark ins,
+html.dark .bg-green-100 {
+  background-color: rgba(6, 78, 59, 0.5);
+  color: #a7f3d0;
+}
+
+html.dark del,
+html.dark .bg-red-100 {
+  background-color: rgba(127, 29, 29, 0.5);
+  color: #fecaca;
+}
+
 /*
  * Responsive tables (AGENTS.md 7f): below 768 px a table with class
  * "stack-table" becomes a list of stacked cards. Each <td> carries a
@@ -18,6 +205,9 @@
     display: block;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid #e2e8f0;
+  }
+  html.dark table.stack-table tr {
+    border-bottom-color: #27354f;
   }
   table.stack-table tr:last-child {
     border-bottom: 0;
@@ -45,6 +235,9 @@
     text-transform: none;
     letter-spacing: normal;
     padding-top: 0.1rem;
+  }
+  html.dark table.stack-table td::before {
+    color: #94a3b8;
   }
   table.stack-table td:not([data-label])::before,
   table.stack-table td[data-label=""]::before {

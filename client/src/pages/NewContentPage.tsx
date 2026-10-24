@@ -233,7 +233,7 @@ export function NewContentPage() {
               placeholder="e.g. Instagram caption: Flow launch"
               className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
             />
-            <span className="text-xs text-slate-400 block text-right">
+            <span className="text-xs text-slate-600 dark:text-slate-400 block text-right">
               {title.length}/120
             </span>
           </div>
@@ -277,7 +277,7 @@ export function NewContentPage() {
             placeholder="e.g. Urban buyers aged 22 to 35"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
           />
-          <span className="text-xs text-slate-400 block text-right">
+          <span className="text-xs text-slate-600 dark:text-slate-400 block text-right">
             {audience.length}/200
           </span>
         </div>
@@ -303,7 +303,7 @@ export function NewContentPage() {
             <p className="text-xs text-slate-500">
               What should this piece achieve? Vouch keeps suggested fixes true to this purpose.
             </p>
-            <span className="text-xs text-slate-400">{purpose.length}/300</span>
+            <span className="text-xs text-slate-600 dark:text-slate-400">{purpose.length}/300</span>
           </div>
         </div>
 
@@ -361,7 +361,7 @@ export function NewContentPage() {
             className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent font-mono"
           />
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-400">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-600 dark:text-slate-400">
             <span>Supports direct text editing or plain text from extracted DOCX.</span>
             <span>{body.length.toLocaleString()} / 20,000 characters</span>
           </div>

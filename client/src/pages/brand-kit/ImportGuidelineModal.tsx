@@ -389,19 +389,19 @@ export function ImportGuidelineModal({
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden sm:overflow-y-auto">
       <div className="bg-white sm:rounded-2xl shadow-xl sm:border border-slate-200 w-full max-w-4xl h-full sm:h-auto max-h-full sm:max-h-[90vh] flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-slate-50/50 shrink-0">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900 shrink-0">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5">
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 Import rules from guideline
               </h2>
               {step === "review" && (
-                <span className="text-xs font-semibold px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full whitespace-nowrap w-fit">
+                <span className="text-xs font-semibold px-2.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 rounded-full whitespace-nowrap w-fit">
                   Review and approve
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               {step === "input"
                 ? "Paste your brand guideline or upload a DOCX document. AI will extract discrete governing rules."
                 : "Review and edit AI-drafted rules. Deselect duplicates or rules you do not wish to adopt."}
@@ -597,7 +597,7 @@ export function ImportGuidelineModal({
 
                       {/* Rule Text (Editable with auto-growing textarea) */}
                       <div className="space-y-1.5 mb-3">
-                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                           Rule Statement (Editable)
                         </label>
                         <AutoGrowingTextarea
@@ -611,7 +611,7 @@ export function ImportGuidelineModal({
 
                       {/* Source Quote with Context Excerpt */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           <span>Evidence: Source Quote from Guideline</span>
                           <span className="text-emerald-700 font-semibold font-sans normal-case">
                             ✓ Quote verified in text
@@ -629,7 +629,7 @@ export function ImportGuidelineModal({
 
         {/* Footer (Step 2 Review only) */}
         {step === "review" && (
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 shrink-0">
             <span className="text-sm font-semibold text-slate-700">
               {selectedIds.size} selected of {plural(drafts.length, "rule")}
             </span>
