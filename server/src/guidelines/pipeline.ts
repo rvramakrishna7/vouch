@@ -514,9 +514,13 @@ For each extracted rule:
         finalDuplicate = proposedCode;
       }
 
-      // 2. Fallback: if any rule has cosine similarity >= 0.85, mark as duplicate regardless of LLM
-      if (highestSim >= 0.85 && highestCode) {
-        finalDuplicate = highestCode;
+      // 2. Fallback: if any rule in the same category has cosine similarity >= 0.74 (or any category >= 0.85), mark as duplicate
+      if (highestCode) {
+        const draftPrefix = CATEGORY_PREFIXES[draft.category];
+        const isSameCategory = highestCode.startsWith(`${draftPrefix}-`);
+        if ((isSameCategory && highestSim >= 0.74) || highestSim >= 0.85) {
+          finalDuplicate = highestCode;
+        }
       }
 
       draft.duplicate_of = finalDuplicate;
