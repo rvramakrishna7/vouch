@@ -20,19 +20,34 @@ export const ALLOWED_SEVERITIES = ["high", "medium", "low"] as const;
 export type RuleCategory = (typeof ALLOWED_CATEGORIES)[number];
 export type RuleSeverity = (typeof ALLOWED_SEVERITIES)[number];
 
-export const aiRuleDraftItemSchema = z.object({
-  category: z.preprocess(
-    (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
-    z.enum(ALLOWED_CATEGORIES),
-  ),
-  severity: z.preprocess(
-    (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
-    z.enum(ALLOWED_SEVERITIES),
-  ),
-  text: z.string().min(1),
-  source_quote: z.string().min(1),
-  duplicate_of: z.string().nullable().optional(),
-});
+export const aiRuleDraftItemSchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === "object") {
+      const copy = { ...(val as any) };
+      if (!copy.category && copy.section) {
+        copy.category = copy.section;
+      }
+      if (!copy.severity) {
+        copy.severity = "medium";
+      }
+      return copy;
+    }
+    return val;
+  },
+  z.object({
+    category: z.preprocess(
+      (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
+      z.enum(ALLOWED_CATEGORIES),
+    ),
+    severity: z.preprocess(
+      (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
+      z.enum(ALLOWED_SEVERITIES),
+    ),
+    text: z.string().min(1),
+    source_quote: z.string().min(1),
+    duplicate_of: z.string().nullable().optional(),
+  }),
+);
 
 export const aiGuidelineDraftResponseSchema = z.object({
   rules: z.array(aiRuleDraftItemSchema),
@@ -311,7 +326,7 @@ export async function runGuidelineDraftPipeline(
         },
       };
     } else {
-      const userPrompt = `Extract all governing brand rules from the following guideline text:
+      const userPrompt = `Extract 8 to 10 discrete governing brand rules across all 4 categories (claims, tone, terminology, accessibility) from the following guideline text. Ensure you extract every guideline directive into the "rules" array:
 
 --- BEGIN EXISTING ACTIVE RULES ---
 ${existingRulesSummary}
@@ -321,8 +336,9 @@ ${existingRulesSummary}
 ${sourceText}
 --- END GUIDELINE TEXT ---
 
-Extract every clear governance directive as a separate rule.
-For each rule:
+For each extracted rule:
+- Ensure "category" is one of: "claims", "tone", "terminology", "accessibility".
+- Ensure "severity" is one of: "high", "medium", "low".
 - Ensure "source_quote" is an exact verbatim quote from the guideline text above.
 - If the rule is similar to or covers the same topic as one of the existing active rules above (such as superlatives/rankings, duration/number proofs, or trademark spelling), set "duplicate_of" to that rule code. Otherwise null.`;
 
