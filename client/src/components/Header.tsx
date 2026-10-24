@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.js";
 import { Button } from "./Button.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 const ROLE_LABELS: Record<string, { label: string; badgeClass: string }> = {
   creator: {
@@ -44,15 +45,15 @@ export function Header() {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
       isActive
-        ? "bg-slate-900 text-white"
-        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+        ? "bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-100"
+        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
     }`;
 
   const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center min-h-11 text-base font-medium px-3 rounded-md transition-colors ${
       isActive
-        ? "bg-slate-900 text-white"
-        : "text-slate-700 hover:bg-slate-100"
+        ? "bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-100"
+        : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
     }`;
 
   // Nav configuration per role:
@@ -96,17 +97,17 @@ export function Header() {
   );
 
   return (
-    <header className="border-b border-slate-200 bg-white relative">
+    <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 relative">
       <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
         <div className="flex items-center gap-6 min-w-0">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="text-xl font-bold tracking-tight text-slate-900">
+            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               Vouch
             </span>
             {organization && (
               <>
-                <span className="text-slate-300 hidden sm:inline">/</span>
-                <span className="text-sm font-medium text-slate-600 hidden sm:inline truncate">
+                <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">/</span>
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 hidden sm:inline truncate">
                   {organization.name}
                 </span>
               </>
@@ -124,13 +125,15 @@ export function Header() {
 
         <div className="hidden md:flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-900 whitespace-nowrap">
+            <span className="text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
               {user.name}
             </span>
             {roleBadge}
           </div>
 
-          <div className="h-4 w-px bg-slate-200" />
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+
+          <ThemeToggle />
 
           <Button
             variant="ghost"
@@ -168,7 +171,7 @@ export function Header() {
       {menuOpen && (
         <div
           id="mobile-menu"
-          className="md:hidden absolute left-0 right-0 top-full z-40 border-b border-slate-200 bg-white shadow-lg px-4 py-3 space-y-3"
+          className="md:hidden absolute left-0 right-0 top-full z-40 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg px-4 py-3 space-y-3"
         >
           <nav className="flex flex-col gap-1">
             {navLinks.map((link) => (
@@ -182,16 +185,19 @@ export function Header() {
               </NavLink>
             ))}
           </nav>
-          <div className="border-t border-slate-200 pt-3 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-slate-900 break-words">
+          <div className="border-t border-slate-200 dark:border-slate-800 pt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-900 dark:text-slate-100 break-words">
               {user.name}
             </span>
             {roleBadge}
             {organization && (
-              <span className="text-xs text-slate-500 w-full">
+              <span className="text-xs text-slate-500 dark:text-slate-400 w-full">
                 {organization.name}
               </span>
             )}
+          </div>
+          <div className="border-t border-slate-200 dark:border-slate-800 pt-2">
+            <ThemeToggle isMobile className="w-full justify-center" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button

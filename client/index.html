@@ -7,6 +7,19 @@
     <link rel="preconnect" href="https://vouch-ten-iota.vercel.app" crossorigin />
     <link rel="dns-prefetch" href="https://vouch-ten-iota.vercel.app" />
     <title>Vouch</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem("vouch_theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (saved === "dark" || (!saved && prefersDark)) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1022,8 +1022,8 @@ export function ContentDetailPage() {
     // Inline edit mode
     if (activeEditId === finding.id) {
       return (
-        <div className="pt-2 border-t border-slate-100 space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
             Replacement Text
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -1065,8 +1065,8 @@ export function ContentDetailPage() {
     if (activeDismissId === finding.id) {
       const isValid = dismissInputReason.trim().length >= 5;
       return (
-        <div className="pt-2 border-t border-slate-100 space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
             Reason for Dismissing (min 5 characters)
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -1112,12 +1112,13 @@ export function ContentDetailPage() {
         {finding.suggested_fix && (
           <Button
             type="button"
+            variant="primary"
             size="sm"
             disabled={isResolving}
             loading={isResolving}
             loadingText="Accepting…"
             onClick={() => handleResolve(finding.id, "accept")}
-            className="!bg-emerald-600 hover:!bg-emerald-700"
+            className="!bg-emerald-700 hover:!bg-emerald-800 !text-white !border-emerald-700"
           >
             Accept fix
           </Button>
@@ -1186,12 +1187,13 @@ export function ContentDetailPage() {
             {isCreatorOwner && (isDraft || isChangesRequested) && !isApproved && !isInReview && (
               <Button
                 type="button"
+                variant="primary"
                 size="md"
                 disabled={submitting || !isLatestReview}
                 loading={submitting}
                 loadingText="Submitting…"
                 onClick={handleSubmitForReview}
-                className="!bg-blue-600 hover:!bg-blue-700 w-full sm:w-auto"
+                className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-blue-600 w-full sm:w-auto"
               >
                 Submit for review
               </Button>
@@ -1326,12 +1328,13 @@ export function ContentDetailPage() {
               </Button>
               <Button
                 type="button"
+                variant="primary"
                 size="sm"
                 disabled={approving}
                 loading={approving}
                 loadingText="Approving…"
                 onClick={() => handleApprove(false)}
-                className="!bg-emerald-600 hover:!bg-emerald-700"
+                className="!bg-emerald-700 hover:!bg-emerald-800 !text-white !border-emerald-700"
               >
                 Approve
               </Button>
@@ -1351,7 +1354,7 @@ export function ContentDetailPage() {
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-600 dark:text-slate-400">
                   {requestChangesComment.trim().length} / 5 chars min
                 </span>
                 <div className="flex items-center gap-2">
@@ -1478,63 +1481,63 @@ export function ContentDetailPage() {
       {/* Metadata Grid */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-sm">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
             Channel
           </span>
           {loading ? (
             <div className="h-5 w-20 bg-slate-200 rounded animate-pulse" />
           ) : (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
               {content?.channel}
             </span>
           )}
         </div>
 
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
             Created By
           </span>
           {loading ? (
             <div className="h-5 w-28 bg-slate-200 rounded animate-pulse" />
           ) : (
-            <span className="text-sm font-medium text-slate-800">
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
               {content?.created_by_name || "Arjun Mehta"}
             </span>
           )}
         </div>
 
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
             Target Audience
           </span>
           {loading ? (
             <div className="h-5 w-36 bg-slate-200 rounded animate-pulse" />
           ) : (
-            <span className="text-sm text-slate-700">{content?.audience}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-200">{content?.audience}</span>
           )}
         </div>
 
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
             Last Updated
           </span>
           {loading ? (
             <div className="h-5 w-24 bg-slate-200 rounded animate-pulse" />
           ) : (
-            <span className="text-sm text-slate-700 whitespace-nowrap">
+            <span className="text-sm text-slate-700 dark:text-slate-200 whitespace-nowrap">
               {formatDate(content?.updated_at)}
             </span>
           )}
         </div>
 
-        <div className="sm:col-span-2 md:col-span-4 pt-3 border-t border-slate-100">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+        <div className="sm:col-span-2 md:col-span-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1">
             Campaign Purpose
           </span>
           {loading ? (
             <div className="h-10 w-full bg-slate-100 rounded-lg animate-pulse" />
           ) : (
-            <p className="text-sm text-slate-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100">
+            <p className="text-sm text-slate-700 dark:text-slate-200 italic bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
               "{content?.purpose}"
             </p>
           )}
@@ -1622,18 +1625,18 @@ export function ContentDetailPage() {
           <div className="order-1 lg:order-none space-y-4 min-w-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-slate-900">
+                <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                   Draft Body
                 </h2>
                 {latestRevision && (
-                  <span className="font-mono text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                     Revision {latestRevision.n}
                   </span>
                 )}
               </div>
 
               {latestRevision && (
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-600 dark:text-slate-400">
                   {latestRevision.body.length.toLocaleString()} characters
                 </span>
               )}
@@ -1651,12 +1654,12 @@ export function ContentDetailPage() {
                 renderHighlightedBody()
               )}
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span>
                   Author: {latestRevision?.created_by_name || content?.created_by_name || "Arjun Mehta"}
                 </span>
                 {findings.length > 0 && isLatestReview && (
-                  <span className="italic text-slate-500">
+                  <span className="italic text-slate-600 dark:text-slate-400">
                     Tip: Click highlighted text to inspect evidence.
                   </span>
                 )}
@@ -1725,7 +1728,7 @@ export function ContentDetailPage() {
                           <span>•</span>
                           <span>{formatDate(rev.created_at)}</span>
                           <span
-                            className={`transition-transform text-slate-400 font-bold ml-auto sm:ml-0 ${
+                            className={`transition-transform text-slate-500 dark:text-slate-400 font-bold ml-auto sm:ml-0 ${
                               isExpanded ? "rotate-180" : ""
                             }`}
                           >
@@ -1735,28 +1738,28 @@ export function ContentDetailPage() {
                       </button>
 
                       {isExpanded && (
-                        <div className="p-4 pt-0 border-t border-slate-100 space-y-3 mt-2">
+                        <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-800 space-y-3 mt-2">
                           {rev.n > 1 && prevRev ? (
                             <div className="space-y-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
                                 Changes from Revision {prevRev.n}
                               </span>
                               <WordDiff oldText={prevRev.body} newText={rev.body} />
-                              <details className="text-xs text-slate-500">
-                                <summary className="cursor-pointer hover:text-slate-800 font-semibold select-none">
+                              <details className="text-xs text-slate-600 dark:text-slate-400">
+                                <summary className="cursor-pointer hover:text-slate-800 dark:hover:text-white font-semibold select-none">
                                   View full body of Revision {rev.n}
                                 </summary>
-                                <div className="mt-2 p-3 bg-white border border-slate-200 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800">
+                                <div className="mt-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800 dark:text-slate-200">
                                   {rev.body}
                                 </div>
                               </details>
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
                                 Initial Revision Text
                               </span>
-                              <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800">
+                              <div className="mt-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg font-mono text-xs whitespace-pre-wrap text-slate-800 dark:text-slate-200">
                                 {rev.body}
                               </div>
                             </div>
@@ -1804,7 +1807,7 @@ export function ContentDetailPage() {
                       edited
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-300 dark:text-slate-400">
                       Accept or edit fixes below to apply
                     </span>
                   )}
@@ -1910,7 +1913,7 @@ export function ContentDetailPage() {
                       {/* Top: Quoted claim + Verdict chip */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-0.5">
-                          <span className="text-xs uppercase font-bold tracking-wider text-slate-400 block">
+                          <span className="text-xs uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">
                             Quoted Claim
                           </span>
                           <span className="font-mono text-sm font-bold text-slate-900">
@@ -1928,29 +1931,29 @@ export function ContentDetailPage() {
                       {/* Evidence Line: Fact and/or Rule citation */}
                       <div className="space-y-1">
                         {finding.fact_code && (
-                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
+                          <div className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 space-y-0.5">
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-slate-900 font-mono">
+                              <span className="font-bold text-slate-900 dark:text-white font-mono">
                                 Fact {finding.fact_code}:
                               </span>
                               {finding.fact_valid_until && (
-                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">
+                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                   Valid until: {formatDate(finding.fact_valid_until)}
                                 </span>
                               )}
                             </div>
-                            <p className="text-slate-700 leading-snug">
+                            <p className="text-slate-700 dark:text-slate-200 leading-snug">
                               {finding.fact_statement || "Approved brand fact"}
                             </p>
                           </div>
                         )}
 
                         {finding.rule_code && (
-                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
-                            <span className="font-bold text-slate-900 font-mono block">
+                          <div className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 space-y-0.5">
+                            <span className="font-bold text-slate-900 dark:text-white font-mono block">
                               Rule {finding.rule_code}:
                             </span>
-                            <p className="text-slate-700 leading-snug">
+                            <p className="text-slate-700 dark:text-slate-200 leading-snug">
                               {finding.rule_text || "Brand guidelines rule"}
                             </p>
                           </div>
@@ -1958,17 +1961,17 @@ export function ContentDetailPage() {
                       </div>
 
                       {/* Reason */}
-                      <p className="text-xs text-slate-600 leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                         {finding.reason}
                       </p>
 
                       {/* Suggested Fix */}
                       {finding.suggested_fix && (
-                        <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2.5 flex items-start gap-2">
-                          <span className="font-semibold text-emerald-800 shrink-0">
+                        <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100 rounded-lg p-2.5 flex items-start gap-2">
+                          <span className="font-semibold text-emerald-800 dark:text-emerald-300 shrink-0">
                             Suggested fix:
                           </span>
-                          <span className="font-mono text-emerald-950 font-bold break-words">
+                          <span className="font-mono text-emerald-950 dark:text-emerald-200 font-bold break-words">
                             "{finding.suggested_fix}"
                           </span>
                         </div>
@@ -2074,14 +2077,14 @@ export function ContentDetailPage() {
                           </span>
                         </div>
                         {typeof finding.confidence === "number" && !isNaN(finding.confidence) && (
-                          <span className="text-xs text-slate-400 font-medium">
+                          <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
                             {Math.round(finding.confidence * 100)}% confidence
                           </span>
                         )}
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-                        <span className="text-xs text-slate-400 block uppercase font-bold tracking-wider">
+                        <span className="text-xs text-slate-600 dark:text-slate-400 block uppercase font-bold tracking-wider">
                           Flagged Span
                         </span>
                         <span className="font-mono text-xs font-bold text-slate-900">
@@ -2090,30 +2093,30 @@ export function ContentDetailPage() {
                       </div>
 
                       {finding.rule_code ? (
-                        <div className="text-xs text-slate-700 bg-slate-100/70 border border-slate-200 rounded-lg p-2.5 space-y-0.5">
-                          <span className="font-bold text-slate-900 font-mono block">
+                        <div className="text-xs text-slate-700 dark:text-slate-200 bg-slate-100/70 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 space-y-0.5">
+                          <span className="font-bold text-slate-900 dark:text-white font-mono block">
                             Rule {finding.rule_code}:
                           </span>
-                          <span className="text-slate-600 block leading-snug">
+                          <span className="text-slate-600 dark:text-slate-300 block leading-snug">
                             {finding.rule_text || "Brand guideline rule"}
                           </span>
                         </div>
                       ) : (
-                        <div className="text-xs font-medium text-slate-500 italic bg-slate-50 border border-slate-200 rounded-lg p-2">
+                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 italic bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
                           Suggestion (no rule cited)
                         </div>
                       )}
 
-                      <p className="text-xs text-slate-600 leading-snug">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug">
                         {finding.reason}
                       </p>
 
                       {finding.suggested_fix && (
-                        <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-2 flex items-start gap-2">
-                          <span className="font-semibold text-emerald-800 shrink-0">
+                        <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100 rounded-lg p-2 flex items-start gap-2">
+                          <span className="font-semibold text-emerald-800 dark:text-emerald-300 shrink-0">
                             Suggested fix:
                           </span>
-                          <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono text-emerald-950 font-bold break-all">
+                          <code className="bg-emerald-100 dark:bg-emerald-900 px-1 py-0.5 rounded font-mono text-emerald-950 dark:text-emerald-200 font-bold break-all">
                             {finding.suggested_fix}
                           </code>
                         </div>
@@ -2139,13 +2142,13 @@ export function ContentDetailPage() {
               Timeline of revisions, reviews, submissions, and approvals.
             </p>
           </div>
-          <span className="text-xs text-slate-400 font-medium">{plural(activity.length, "event")}</span>
+          <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">{plural(activity.length, "event")}</span>
         </div>
 
         {activityLoading && activity.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-400">Loading activity…</div>
+          <div className="py-6 text-center text-xs text-slate-600 dark:text-slate-400">Loading activity…</div>
         ) : activity.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-400">No activity recorded yet.</div>
+          <div className="py-6 text-center text-xs text-slate-600 dark:text-slate-400">No activity recorded yet.</div>
         ) : (
           <div className="space-y-3">
             {activity.map((item) => {
@@ -2153,19 +2156,19 @@ export function ContentDetailPage() {
               return (
                 <div
                   key={item.id}
-                  className="flex items-start gap-3 text-xs border-l-2 border-slate-200 pl-3 py-1"
+                  className="flex items-start gap-3 text-xs border-l-2 border-slate-200 dark:border-slate-800 pl-3 py-1"
                 >
                   <div className="flex-1 space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-semibold text-slate-900 dark:text-white">
                         {item.actor_name || "System"}
                       </span>
-                      <span className="text-slate-400">•</span>
-                      <span className="font-medium text-slate-700">
+                      <span className="text-slate-400 dark:text-slate-500">•</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
                         {getActionDisplay(item)}
                       </span>
-                      <span className="text-slate-400">•</span>
-                      <span className="text-slate-400 text-xs font-mono whitespace-nowrap">
+                      <span className="text-slate-400 dark:text-slate-500">•</span>
+                      <span className="text-slate-600 dark:text-slate-400 text-xs font-mono whitespace-nowrap">
                         {formatDate(item.time)}
                       </span>
                     </div>
@@ -2198,7 +2201,7 @@ export function ContentDetailPage() {
               <button
                 type="button"
                 onClick={() => setPreviewModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+                className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white text-2xl font-bold p-1 cursor-pointer leading-none"
               >
                 ×
               </button>
@@ -2206,7 +2209,7 @@ export function ContentDetailPage() {
 
             <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                   Diff Preview
                 </span>
                 <WordDiff
@@ -2276,7 +2279,7 @@ export function ContentDetailPage() {
               <button
                 type="button"
                 onClick={() => setManualModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+                className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white text-2xl font-bold p-1 cursor-pointer leading-none"
               >
                 ×
               </button>
@@ -2284,20 +2287,20 @@ export function ContentDetailPage() {
 
             <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
                   Draft Text
                 </label>
                 <textarea
                   value={manualBody}
                   onChange={(e) => setManualBody(e.target.value)}
                   rows={7}
-                  className="w-full text-sm font-sans p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 leading-relaxed font-normal text-slate-800"
+                  className="w-full text-sm font-sans p-3 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 leading-relaxed font-normal text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900"
                   placeholder="Edit draft text..."
                 />
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
                   Live Word-Level Diff
                 </span>
                 <WordDiff oldText={latestRevision.body} newText={manualBody} />
@@ -2349,14 +2352,14 @@ export function ContentDetailPage() {
               <button
                 type="button"
                 onClick={() => setOverrideDialogOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl font-bold p-1 cursor-pointer leading-none"
+                className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white text-2xl font-bold p-1 cursor-pointer leading-none"
               >
                 ×
               </button>
             </div>
 
             <div className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-900 dark:text-amber-200 space-y-1">
                 <span className="font-bold block">Conditions requiring override:</span>
                 {typeof overrideHighCount === "number" && overrideHighCount > 0 && (
                   <p>• {plural(overrideHighCount, "high-severity issue")} still open</p>
@@ -2367,7 +2370,7 @@ export function ContentDetailPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block">
                   Override reason (min 10 characters)
                 </label>
                 <textarea
@@ -2375,10 +2378,10 @@ export function ContentDetailPage() {
                   onChange={(e) => setOverrideReason(e.target.value)}
                   rows={4}
                   placeholder="Explain why this content is approved despite open issues..."
-                  className="w-full text-xs p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full text-xs p-3 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
                   autoFocus
                 />
-                <span className="text-xs text-slate-400 block text-right">
+                <span className="text-xs text-slate-600 dark:text-slate-400 block text-right">
                   {overrideReason.trim().length} / 10 chars min
                 </span>
               </div>
@@ -2395,12 +2398,13 @@ export function ContentDetailPage() {
               </Button>
               <Button
                 type="button"
+                variant="primary"
                 size="sm"
                 disabled={approving || overrideReason.trim().length < 10}
                 loading={approving}
                 loadingText="Approving…"
                 onClick={() => handleApprove(true)}
-                className="!bg-emerald-600 hover:!bg-emerald-700"
+                className="!bg-emerald-700 hover:!bg-emerald-800 !text-white !border-emerald-700"
               >
                 Approve with override
               </Button>
