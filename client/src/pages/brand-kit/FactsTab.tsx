@@ -114,7 +114,7 @@ export function FactsTab({ isBrandManager }: { isBrandManager: boolean }) {
         body: JSON.stringify({
           statement: editStatement.trim(),
           source: editSource.trim(),
-          owner: editOwner.trim() || null,
+          owner: editOwner.trim() || undefined,
           valid_until: editValidUntil,
         }),
       });

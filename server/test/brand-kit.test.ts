@@ -113,9 +113,9 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
   });
 
   it("brand manager creates a claims rule and gets the next CLAIM-xx code", async () => {
-    // 1. Inspect current max code for claims in this org
+    // 1. Inspect current max code for claims in this org (matching rules.ts code generation)
     const { rows: existingRules } = await pool.query<{ code: string }>(
-      "SELECT code FROM rules WHERE category = 'claims' AND status != 'archived'",
+      "SELECT code FROM rules WHERE code LIKE 'CLAIM-%'",
     );
     let maxClaim = 0;
     for (const r of existingRules) {
@@ -180,6 +180,20 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
   });
 
   it("brand manager creates a fact with code F-21 or higher", async () => {
+    // 1. Inspect current max code for facts (matching facts.ts code generation)
+    const { rows: existingFacts } = await pool.query<{ code: string }>(
+      "SELECT code FROM facts WHERE code LIKE 'F-%'",
+    );
+    let maxFact = 20;
+    for (const f of existingFacts) {
+      const parts = f.code.split("-");
+      if (parts[0] === "F") {
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxFact) maxFact = num;
+      }
+    }
+    const expectedFactCode = `F-${String(maxFact + 1).padStart(2, "0")}`;
+
     const res = await request(app)
       .post("/api/facts")
       .set("Authorization", `Bearer ${brandManagerToken}`)
@@ -190,7 +204,7 @@ describe.runIf(hasDb)("Brand Kit API (rules, facts, terms)", () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.code).toBe("F-21");
+    expect(res.body.code).toBe(expectedFactCode);
     expect(res.body.expired).toBe(false);
     createdFactId = res.body.id;
   });

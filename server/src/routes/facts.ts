@@ -19,7 +19,7 @@ const patchFactSchema = z
   .object({
     statement: z.string().min(1).optional(),
     source: z.string().min(1).optional(),
-    owner: z.string().optional(),
+    owner: z.string().nullable().optional(),
     valid_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
