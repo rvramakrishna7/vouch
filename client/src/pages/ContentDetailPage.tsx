@@ -1322,7 +1322,7 @@ export function ContentDetailPage() {
                 variant="secondary"
                 size="sm"
                 onClick={() => setRequestChangesOpen(!requestChangesOpen)}
-                className="!bg-amber-500 hover:!bg-amber-600 !text-white !border-amber-500"
+                className="!bg-amber-500 hover:!bg-amber-400 !text-slate-950 font-bold !border-amber-500"
               >
                 Request changes
               </Button>
@@ -1419,7 +1419,7 @@ export function ContentDetailPage() {
               setCreatedRevisionBanner(null);
               handleRunReview();
             }}
-            className="!bg-amber-600 hover:!bg-amber-700 shrink-0"
+            className="!bg-amber-500 hover:!bg-amber-600 !text-slate-950 font-bold !border-amber-500 shrink-0"
           >
             Run Vouch review →
           </Button>
