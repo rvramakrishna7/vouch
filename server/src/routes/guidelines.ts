@@ -1,7 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import multer from "multer";
 import path from "node:path";
-import mammoth from "mammoth";
 import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
@@ -17,12 +15,22 @@ export const guidelinesRouter = Router();
 
 guidelinesRouter.use(requireAuth);
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 4 * 1024 * 1024, // 4 MB
-  },
-});
+let uploadCache: any = null;
+async function getUpload() {
+  if (!uploadCache) {
+    const { default: multer } = await import("multer");
+    uploadCache = {
+      multer,
+      upload: multer({
+        storage: multer.memoryStorage(),
+        limits: {
+          fileSize: 4 * 1024 * 1024, // 4 MB
+        },
+      }),
+    };
+  }
+  return uploadCache;
+}
 
 const draftJsonSchema = z.object({
   text: z.string().min(50).max(20000),
@@ -47,18 +55,23 @@ const applyRulesSchema = z.object({
 guidelinesRouter.post(
   "/draft",
   requireRole("brand_manager"),
-  (req: Request, res: Response, next) => {
+  async (req: Request, res: Response, next) => {
     // If multipart/form-data, process file with multer
     if (req.is("multipart/form-data")) {
-      upload.single("file")(req, res, (err) => {
-        if (err) {
-          if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-            return res.status(413).json({ error: "file_too_large" });
+      try {
+        const { multer, upload } = await getUpload();
+        upload.single("file")(req, res, (err: any) => {
+          if (err) {
+            if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+              return res.status(413).json({ error: "file_too_large" });
+            }
+            return res.status(400).json({ error: "invalid_input", details: err.message });
           }
-          return res.status(400).json({ error: "invalid_input", details: err.message });
-        }
-        next();
-      });
+          next();
+        });
+      } catch (e) {
+        next(e);
+      }
     } else {
       next();
     }
@@ -83,6 +96,7 @@ guidelinesRouter.post(
       }
 
       try {
+        const { default: mammoth } = await import("mammoth");
         const result = await mammoth.extractRawText({ buffer: file.buffer });
         guidelineText = result.value.trim();
       } catch (err: any) {
