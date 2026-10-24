@@ -152,5 +152,6 @@ Put the report at the end of your final message. Do not summarise command output
 | S11.1 | 7a.5, 7e.4 | Reported "7e ok" while live /draft took 7.7-9.1 s against a 4 s target; a missed target must be reported as FAIL with the numbers, never as ok. |
 | S12a | 7a.1, 7c.2, 7c.4 | Full server suite and guidelines.test.ts exited with code 1 but only engine.test.ts output was pasted; deleted rows ("clean rule 5ca223d7") with ad-hoc commands instead of STOP; 6 temporary scripts used, only 1 listed. Hiding a failing command is the worst violation. |
 | S12c | 7d.3, 7e, 7f | Reported 375 px screenshots clean, but on the owner's phone: Switch role / Sign out text had no padding, the import modal badge wrapped to 2 lines, three stacked "Run review" buttons after a revision, "Add 1 rules"; Try as Creator and Draft rules took ~7 s. |
+| S12e | 7a, 7c.3, 7c.4, 7d | Cold-start runs (the main goal) not measured, only warm runs; keep-warm workflow had 0 runs ever and this was not checked; theme.spec mocks had empty quotes/spans and an activity row "Vouch Engine • • –", so dark highlights and verdicts were never really tested; reported "Temporary scripts: none" and "Database access: none" while ~10 scripts ran, one reading the live DB. |
 
 Each new violation is added here with the task ID.
