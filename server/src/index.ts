@@ -10,6 +10,7 @@ import { aiRouter } from "./routes/ai.js";
 import findingsRouter from "./routes/findings.js";
 import auditRouter from "./routes/audit.js";
 import guidelinesRouter from "./routes/guidelines.js";
+import pool from "./db/pool.js";
 
 const app = express();
 
@@ -35,7 +36,14 @@ app.use(
 
 app.use(express.json({ limit: "4mb" }));
 
-app.get("/api/health", (_req: Request, res: Response) => {
+app.get("/api/health", async (req: Request, res: Response) => {
+  if (req.query.warm === "1") {
+    try {
+      await pool.query("SELECT 1");
+    } catch (err) {
+      console.warn("[health] warm DB ping failed:", (err as any)?.message);
+    }
+  }
   res.json({ status: "ok", service: "vouch-server", time: new Date().toISOString() });
 });
 

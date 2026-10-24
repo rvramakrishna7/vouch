@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
+import { Button } from "../../components/Button.js";
 
 export interface Term {
   id: string;
@@ -169,13 +170,14 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
           Controlled brand vocabulary: banned terms that violate guidelines, regulated terms requiring explicit substantiation, and preferred terms.
         </p>
         {isBrandManager && (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setShowAddForm(!showAddForm)}
-            className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-1.5 rounded-lg transition-colors"
           >
             {showAddForm ? "Cancel" : "+ Add term"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -231,20 +233,22 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowAddForm(false)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={submittingAdd}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              size="sm"
+              loading={submittingAdd}
+              loadingText="Saving…"
             >
-              {submittingAdd ? "Saving…" : "Save Term"}
-            </button>
+              Save Term
+            </Button>
           </div>
         </form>
       )}
@@ -256,13 +260,14 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
             <h3 className="text-sm font-bold text-slate-900">
               Editing Term: <span className="font-semibold text-blue-700">{editingTerm.term}</span>
             </h3>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingTerm(null)}
-              className="text-xs text-slate-500 hover:text-slate-800"
             >
               Close
-            </button>
+            </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -298,20 +303,22 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingTerm(null)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={submittingEdit}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              size="sm"
+              loading={submittingEdit}
+              loadingText="Updating…"
             >
-              {submittingEdit ? "Updating…" : "Update Term"}
-            </button>
+              Update Term
+            </Button>
           </div>
         </form>
       )}
@@ -348,43 +355,48 @@ export function TermsTab({ isBrandManager }: { isBrandManager: boolean }) {
                     {isBrandManager && (
                       <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap">
                         {confirmDeleteId === term.id ? (
-                          <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 px-2 py-1 rounded text-xs">
+                          <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg text-xs">
                             <span className="text-red-700 font-medium">Are you sure?</span>
-                            <button
+                            <Button
                               type="button"
-                              disabled={deletingId === term.id}
+                              variant="danger"
+                              size="sm"
+                              loading={deletingId === term.id}
+                              loadingText="Deleting…"
                               onClick={() => handleDelete(term)}
-                              className="font-bold text-red-700 hover:text-red-900 underline"
                             >
-                              {deletingId === term.id ? "Deleting…" : "Yes, delete"}
-                            </button>
-                            <button
+                              Yes, delete
+                            </Button>
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="text-slate-500 hover:text-slate-800"
                             >
                               Cancel
-                            </button>
+                            </Button>
                           </div>
                         ) : (
-                          <div className="space-x-2">
-                            <button
+                          <div className="inline-flex items-center gap-1.5">
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleStartEdit(term)}
-                              className="text-xs font-medium text-blue-600 hover:text-blue-800"
                             >
                               Edit
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
+                              variant="danger"
+                              size="sm"
                               onClick={() => {
                                 setConfirmDeleteId(term.id);
                                 setEditingTerm(null);
                               }}
-                              className="text-xs font-medium text-red-600 hover:text-red-800"
                             >
                               Delete
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </td>

@@ -134,7 +134,7 @@ export function ReviewsPage() {
                       </span>
                     </td>
                     <td data-label="Creator" className="px-6 py-4 text-xs font-medium text-slate-700">
-                      {item.created_by_name || "Unknown"}
+                      {item.created_by_name || "—"}
                     </td>
                     <td data-label="Status" className="px-6 py-4">
                       <StatusBadge status={item.status} />

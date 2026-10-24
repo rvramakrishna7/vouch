@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.js";
+import { Button } from "./Button.js";
 
 const ROLE_LABELS: Record<string, { label: string; badgeClass: string }> = {
   creator: {
@@ -131,32 +132,37 @@ export function Header() {
 
           <div className="h-4 w-px bg-slate-200" />
 
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleSwitchRole}
             type="button"
-            className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer whitespace-nowrap"
           >
             Switch role
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleLogout}
             type="button"
-            className="text-xs font-medium text-red-600 hover:text-red-700 cursor-pointer whitespace-nowrap"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-transparent"
           >
             Sign out
-          </button>
+          </Button>
         </div>
 
-        <button
+        <Button
           type="button"
           aria-label="Menu"
           aria-expanded={menuOpen}
           aria-controls="mobile-menu"
+          variant="secondary"
+          size="md"
           onClick={() => setMenuOpen((o) => !o)}
-          className="md:hidden inline-flex items-center justify-center h-11 px-3 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+          className="md:hidden"
         >
           {menuOpen ? "Hide menu" : "Menu"}
-        </button>
+        </Button>
       </div>
 
       {menuOpen && (
@@ -188,20 +194,24 @@ export function Header() {
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="md"
               onClick={handleSwitchRole}
               type="button"
-              className="min-h-11 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+              className="w-full"
             >
               Switch role
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
               onClick={handleLogout}
               type="button"
-              className="min-h-11 rounded-md border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 cursor-pointer"
+              className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
             >
               Sign out
-            </button>
+            </Button>
           </div>
         </div>
       )}

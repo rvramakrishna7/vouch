@@ -99,12 +99,16 @@ async function assertResponsive(page: Page, label: string, width: number) {
       tableOverflow: string[];
       smallText: string[];
       smallTargets: string[];
+      smallButtonPadding: string[];
+      multiLineBadges: string[];
     } = {
       pageOverflow: doc.scrollWidth - doc.clientWidth,
       wideElements: [],
       tableOverflow: [],
       smallText: [],
       smallTargets: [],
+      smallButtonPadding: [],
+      multiLineBadges: [],
     };
 
     const isVisible = (el: Element) => {
@@ -151,6 +155,30 @@ async function assertResponsive(page: Page, label: string, width: number) {
       if (fs < 11.99) out.smallText.push(`${desc(el)} ${fs}px`);
     }
 
+    // button padding-left >= 12px (Requirement 11)
+    for (const b of Array.from(document.querySelectorAll("button"))) {
+      if (!isVisible(b)) continue;
+      const txt = (b.textContent || "").trim();
+      if (txt === "×" || txt === "✕" || txt === "" || b.classList.contains("touch-auto") || b.getAttribute("aria-label") === "Close") continue;
+      const pl = parseFloat(getComputedStyle(b).paddingLeft);
+      if (pl < 11.5) out.smallButtonPadding.push(`${desc(b)} pl=${pl}px`);
+    }
+
+    // no badge/pill has height > 1 line (Requirement 11)
+    for (const el of Array.from(document.querySelectorAll('.rounded-full, [class*="rounded-full"]'))) {
+      if (!isVisible(el)) continue;
+      const r = (el as HTMLElement).getBoundingClientRect();
+      if (r.width <= 32 && r.height <= 32) continue; // skip circular icon badges
+      const s = getComputedStyle(el);
+      const lh = parseFloat(s.lineHeight) || 16;
+      const pt = parseFloat(s.paddingTop) || 0;
+      const pb = parseFloat(s.paddingBottom) || 0;
+      const maxExpectedH = lh + pt + pb + 6;
+      if (el.clientHeight > maxExpectedH) {
+        out.multiLineBadges.push(`${desc(el)} h=${el.clientHeight}px expected<=${maxExpectedH}px`);
+      }
+    }
+
     // touch targets: >= 40 px high on phone (7f.2)
     if (vw < 768) {
       const targets = Array.from(
@@ -173,6 +201,8 @@ async function assertResponsive(page: Page, label: string, width: number) {
   expect(report.tableOverflow, `${label} @${width}: table overflow`).toEqual([]);
   expect(report.smallText, `${label} @${width}: text smaller than 12px`).toEqual([]);
   expect(report.smallTargets, `${label} @${width}: touch targets under 40px`).toEqual([]);
+  expect(report.smallButtonPadding, `${label} @${width}: buttons with padding-left < 12px`).toEqual([]);
+  expect(report.multiLineBadges, `${label} @${width}: badges wrapping across lines`).toEqual([]);
 }
 
 interface MockState {
@@ -624,6 +654,20 @@ test.describe("Responsive layout (S12c, AGENTS.md 7f)", () => {
       await assertResponsive(page, "login", width);
       await shot(page, "login", width);
     }
+
+    // click on a button triggers its pending label within 100 ms (Requirement 11)
+    await page.route(`${API}/api/auth/demo`, async (route) => {
+      await new Promise((r) => setTimeout(r, 400));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ token: "fake-jwt", user: creatorUser }),
+        headers: { "access-control-allow-origin": "*" },
+      });
+    });
+    const creatorBtn = page.getByRole("button", { name: "Try as Creator" });
+    await creatorBtn.click();
+    await expect(page.getByRole("button", { name: "Signing in…" })).toBeVisible({ timeout: 100 });
   });
 
   test("Header menu: collapses on phone, full nav from tablet", async ({ page }) => {
@@ -752,7 +796,11 @@ test.describe("Responsive layout (S12c, AGENTS.md 7f)", () => {
     state.revisions = 2;
     state.reviewForRev = 1;
     state.resolution = "accepted";
-    await visitAll(page, `/content/${CONTENT_ID}`, "content_detail_rev2_stale", "text=These findings are for Revision 1");
+    await visitAll(page, `/content/${CONTENT_ID}`, "content_detail_rev2_stale", "text=These findings are for Revision 1", async () => {
+      // Exactly ONE "Run Vouch review" button is visible (Requirement 11)
+      const runReviewBtns = await page.getByRole("button", { name: /Run Vouch review/ }).all();
+      expect(runReviewBtns.length, "Exactly one Run Vouch review button visible").toBe(1);
+    });
   });
 
   test("Reviewer: review queue, decision panel, override dialog, audit log", async ({ page }) => {
@@ -826,7 +874,7 @@ test.describe("Responsive layout (S12c, AGENTS.md 7f)", () => {
       await page.locator("button:has-text('Draft rules')").click();
       await page.waitForSelector("text=Review and approve");
       if (w < 768) {
-        const addBtn = await page.locator("button:has-text('Add 1 rules')").boundingBox();
+        const addBtn = await page.locator("button:has-text('Add 1 rule')").boundingBox();
         expect(addBtn!.y + addBtn!.height, "sticky footer button inside viewport").toBeLessThanOrEqual(812);
         expect(addBtn!.height).toBeGreaterThanOrEqual(40);
       }

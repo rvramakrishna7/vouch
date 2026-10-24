@@ -19,6 +19,15 @@ export function formatDate(input?: string | number | Date | null): string {
 }
 
 /**
+ * Shared plural helper (AGENTS.md 7e.8):
+ * Formats "1 rule" / "2 rules", never "rule(s)" or "1 rules".
+ */
+export function plural(count: number, singular: string, pluralForm?: string): string {
+  const form = count === 1 ? singular : (pluralForm ?? `${singular}s`);
+  return `${count} ${form}`;
+}
+
+/**
  * Shortens long entity identifiers like "content:fd4ebc26-8971-46ab-8209-1e35d1f879ab"
  * to "content · fd4ebc26" with full id preserved for title tooltips.
  */

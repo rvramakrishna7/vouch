@@ -321,7 +321,7 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
     // Uncheck Draft 3 -> now 1 selected
     await checkboxes.nth(2).click();
     await expect(page.locator("text=1 selected of 3 rules")).toBeVisible();
-    await expect(page.locator("button:has-text('Add 1 rules')")).toBeVisible();
+    await expect(page.locator("button:has-text('Add 1 rule')")).toBeVisible();
 
     // Re-check Draft 3 -> now 2 selected
     await checkboxes.nth(2).click();
@@ -336,7 +336,7 @@ test.describe("Guideline Import Workflow (S11) E2E", () => {
     await expect(page.locator("h2:has-text('Import Rules from Guideline')")).toHaveCount(0);
 
     // Success banner visible in RulesTab
-    await expect(page.locator("text=Successfully imported 2 rule(s) into Brand Kit.")).toBeVisible();
+    await expect(page.locator("text=Successfully imported 2 rules into Brand Kit.")).toBeVisible();
 
     // Newly added rules visible in rules list
     await expect(page.locator("text=CLAIM-06")).toBeVisible();

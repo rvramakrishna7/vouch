@@ -5,6 +5,7 @@ import {
   embed,
 } from "../ai/adapter.js";
 import { AiUnavailableError } from "../ai/types.js";
+import { timingStorage } from "../middleware/timing.js";
 
 export const CATEGORY_PREFIXES: Record<string, string> = {
   claims: "CLAIM",
@@ -206,20 +207,68 @@ export async function runGuidelineDraftPipeline(
     latency_ms: 0,
   };
 
+  const embedder = customEmbedder || embed;
+
+  // Pre-filter cached vs uncached existing rules
+  const existingVectorsMap = new Map<string, number[]>();
+  const uncachedRules: ExistingRule[] = [];
+
+  for (const r of existingRules) {
+    const cacheKey = r.id || `${r.code}:${r.version ?? 1}`;
+    const cached = ruleEmbeddingCache.get(cacheKey);
+    if (cached && cached.version === (r.version ?? 1) && cached.text === r.text) {
+      existingVectorsMap.set(r.code, cached.vector);
+    } else {
+      uncachedRules.push(r);
+    }
+  }
+
+  // Pre-embed uncached existing rules in parallel with the AI call
+  const preEmbedPromise = (async () => {
+    if (uncachedRules.length === 0) return;
+    const start = performance.now();
+    try {
+      const vectors = await embedder(uncachedRules.map((r) => r.text));
+      if (Array.isArray(vectors) && vectors.length === uncachedRules.length) {
+        for (let i = 0; i < uncachedRules.length; i++) {
+          const rule = uncachedRules[i];
+          const vec = vectors[i];
+          const cacheKey = rule.id || `${rule.code}:${rule.version ?? 1}`;
+          ruleEmbeddingCache.set(cacheKey, {
+            vector: vec,
+            version: rule.version ?? 1,
+            text: rule.text,
+          });
+          existingVectorsMap.set(rule.code, vec);
+        }
+      }
+    } catch (err) {
+      console.warn("[GuidelinePipeline] Pre-embedding existing rules failed:", (err as any)?.message);
+    } finally {
+      const store = timingStorage.getStore();
+      if (store) {
+        store.embedTime += performance.now() - start;
+      }
+    }
+  })();
+
   const existingRulesSummary = existingRules.length > 0
     ? existingRules.map((r) => `- [${r.code}] (${r.category}, ${r.severity ?? "rule"}): ${r.text}`).join("\n")
     : "(No existing rules)";
 
-  if (customDraftGenerator) {
-    const res = await customDraftGenerator(sourceText);
-    aiRules = res.rules;
-    aiMetadata = {
-      provider: res.provider,
-      model: res.model,
-      latency_ms: res.latency_ms,
-    };
-  } else {
-    const userPrompt = `Extract all governing brand rules from the following guideline text:
+  const aiPromise = (async () => {
+    if (customDraftGenerator) {
+      const res = await customDraftGenerator(sourceText);
+      return {
+        rules: res.rules,
+        metadata: {
+          provider: res.provider,
+          model: res.model,
+          latency_ms: res.latency_ms,
+        },
+      };
+    } else {
+      const userPrompt = `Extract all governing brand rules from the following guideline text:
 
 --- BEGIN EXISTING ACTIVE RULES ---
 ${existingRulesSummary}
@@ -234,21 +283,33 @@ For each rule:
 - Ensure "source_quote" is an exact verbatim quote from the guideline text above.
 - If the rule is similar to or covers the same topic as one of the existing active rules above (such as superlatives/rankings, duration/number proofs, or trademark spelling), set "duplicate_of" to that rule code. Otherwise null.`;
 
-    const result = await generateJson({
-      system: GUIDELINE_SYSTEM_PROMPT,
-      user: userPrompt,
-      schema: aiGuidelineDraftResponseSchema,
-      temperature: 0,
-      timeoutMs: 25000,
-    });
+      const result = await generateJson({
+        system: GUIDELINE_SYSTEM_PROMPT,
+        user: userPrompt,
+        schema: aiGuidelineDraftResponseSchema,
+        temperature: 0,
+        timeoutMs: 25000,
+      });
 
-    aiRules = result.data.rules;
-    aiMetadata = {
-      provider: result.provider,
-      model: result.model,
-      latency_ms: Math.round(result.latencyMs),
-    };
-  }
+      const store = timingStorage.getStore();
+      if (store) {
+        store.aiTime += result.latencyMs;
+      }
+
+      return {
+        rules: result.data.rules,
+        metadata: {
+          provider: result.provider,
+          model: result.model,
+          latency_ms: Math.round(result.latencyMs),
+        },
+      };
+    }
+  })();
+
+  const [aiResult] = await Promise.all([aiPromise, preEmbedPromise]);
+  aiRules = aiResult.rules;
+  aiMetadata = aiResult.metadata;
 
   // 1. Code validation of source quotes strictly on sourceText
   let rejectedCount = 0;
@@ -328,92 +389,50 @@ For each rule:
   }
 
   // 3. Embeddings & Duplicate Verification
-  // Hybrid approach:
-  // - Batch embed in ONE call (cached existing rules + uncached rules + drafts)
-  // - If LLM proposed duplicate_of, verify cosine similarity >= 0.70 (else clear)
-  // - In addition, any draft with cosine similarity >= 0.85 to an existing rule is marked duplicate
-  if (existingRules.length > 0 && assignedDrafts.length > 0) {
+  // Existing rules were already pre-embedded/cached in parallel with the AI call.
+  // Now embed newly generated drafts in ONE small batch call.
+  if (existingRules.length > 0 && assignedDrafts.length > 0 && existingVectorsMap.size > 0) {
+    const embedStart = performance.now();
     try {
-      const embedder = customEmbedder || embed;
+      const draftVectors = await embedder(assignedDrafts.map((d) => d.text));
+      if (Array.isArray(draftVectors) && draftVectors.length === assignedDrafts.length) {
+        for (let i = 0; i < assignedDrafts.length; i++) {
+          const draft = assignedDrafts[i];
+          const draftVec = draftVectors[i];
+          const proposedCode = draft.duplicate_of;
 
-      // Identify which existing rules are missing from the cache
-      const uncachedRules: ExistingRule[] = [];
-      const existingVectorsMap = new Map<string, number[]>();
+          let highestSim = 0;
+          let highestCode: string | null = null;
+          let proposedSim = 0;
 
-      for (const r of existingRules) {
-        const cacheKey = r.id || `${r.code}:${r.version ?? 1}`;
-        const cached = ruleEmbeddingCache.get(cacheKey);
-        if (cached && cached.version === (r.version ?? 1) && cached.text === r.text) {
-          existingVectorsMap.set(r.code, cached.vector);
-        } else {
-          uncachedRules.push(r);
-        }
-      }
+          for (const existing of existingRules) {
+            const exVec = existingVectorsMap.get(existing.code);
+            if (!exVec) continue;
+            const sim = cosineSimilarity(draftVec, exVec);
 
-      // Collect all texts needed to embed in a SINGLE batch call
-      const textsToEmbed: string[] = [
-        ...uncachedRules.map((r) => r.text),
-        ...assignedDrafts.map((d) => d.text),
-      ];
+            if (existing.code === proposedCode) {
+              proposedSim = sim;
+            }
 
-      if (textsToEmbed.length > 0) {
-        const allVectors = await embedder(textsToEmbed);
-        if (Array.isArray(allVectors) && allVectors.length === textsToEmbed.length) {
-          // Unpack uncached rules vectors
-          for (let i = 0; i < uncachedRules.length; i++) {
-            const rule = uncachedRules[i];
-            const vec = allVectors[i];
-            const cacheKey = rule.id || `${rule.code}:${rule.version ?? 1}`;
-            ruleEmbeddingCache.set(cacheKey, {
-              vector: vec,
-              version: rule.version ?? 1,
-              text: rule.text,
-            });
-            existingVectorsMap.set(rule.code, vec);
+            if (sim > highestSim) {
+              highestSim = sim;
+              highestCode = existing.code;
+            }
           }
 
-          // Unpack drafts vectors
-          const draftVectors = allVectors.slice(uncachedRules.length);
-
-          // Evaluate similarity for each draft
-          for (let i = 0; i < assignedDrafts.length; i++) {
-            const draft = assignedDrafts[i];
-            const draftVec = draftVectors[i];
-            const proposedCode = draft.duplicate_of;
-
-            let highestSim = 0;
-            let highestCode: string | null = null;
-            let proposedSim = 0;
-
-            for (const existing of existingRules) {
-              const exVec = existingVectorsMap.get(existing.code);
-              if (!exVec) continue;
-              const sim = cosineSimilarity(draftVec, exVec);
-
-              if (existing.code === proposedCode) {
-                proposedSim = sim;
-              }
-
-              if (sim > highestSim) {
-                highestSim = sim;
-                highestCode = existing.code;
-              }
-            }
-
-            // Dual criteria:
-            // 1. If LLM proposed duplicate, accept ONLY if cosine similarity >= 0.70
-            let finalDuplicate: string | null = null;
-            if (proposedCode && proposedSim >= 0.70) {
-              finalDuplicate = proposedCode;
-            }
-
-            // 2. Fallback: if any rule has cosine similarity >= 0.85, mark as duplicate regardless of LLM
-            if (highestSim >= 0.85 && highestCode) {
-              finalDuplicate = highestCode;
-            }
-
-            draft.duplicate_of = finalDuplicate;
+          // Dual criteria:
+          // 1. If LLM proposed duplicate, accept ONLY if cosine similarity >= 0.70
+          let finalDuplicate: string | null = null;
+          if (proposedCode && proposedSim >= 0.70) {
+            finalDuplicate = proposedCode;
           }
+
+          // 2. Fallback: if any rule has cosine similarity >= 0.85, mark as duplicate regardless of LLM
+          if (highestSim >= 0.85 && highestCode) {
+            finalDuplicate = highestCode;
+          }
+
+          draft.duplicate_of = finalDuplicate;
         }
       }
     } catch (err: any) {
@@ -422,6 +441,11 @@ For each rule:
         throw new AiUnavailableError(`AI embedding failed: ${err.message}`, err);
       }
       throw err;
+    } finally {
+      const store = timingStorage.getStore();
+      if (store) {
+        store.embedTime += performance.now() - embedStart;
+      }
     }
   }
 

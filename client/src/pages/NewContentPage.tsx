@@ -2,6 +2,7 @@ import { useState, useRef, type FormEvent, type ChangeEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../lib/api.js";
 import { useAuth } from "../auth/AuthContext.js";
+import { Button } from "../components/Button.js";
 
 const CHANNELS = [
   "Instagram",
@@ -175,10 +176,11 @@ export function NewContentPage() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={handleUseSample}
-          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-11 sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-slate-200"
         >
           <svg
             className="w-3.5 h-3.5 text-slate-500"
@@ -194,7 +196,7 @@ export function NewContentPage() {
             />
           </svg>
           Use sample caption
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -322,11 +324,13 @@ export function NewContentPage() {
                 onChange={handleFileUpload}
                 className="hidden"
               />
-              <button
+              <Button
                 type="button"
-                disabled={uploading}
+                variant="outline"
+                size="sm"
+                loading={uploading}
+                loadingText="Extracting text…"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-11 sm:min-h-0 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
               >
                 <svg
                   className="w-3.5 h-3.5 text-slate-500"
@@ -341,8 +345,8 @@ export function NewContentPage() {
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                   />
                 </svg>
-                {uploading ? "Extracting text…" : "Upload .docx"}
-              </button>
+                Upload .docx
+              </Button>
             </div>
           </div>
 
@@ -364,19 +368,22 @@ export function NewContentPage() {
         </div>
 
         <div className="pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-          <Link
-            to="/content"
-            className="px-4 py-2 min-h-11 sm:min-h-0 inline-flex items-center justify-center border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+          <Button
+            type="button"
+            variant="ghost"
+            size="md"
+            onClick={() => navigate("/content")}
           >
             Cancel
-          </Link>
-          <button
+          </Button>
+          <Button
             type="submit"
-            disabled={submitting}
-            className="px-5 py-2 min-h-11 sm:min-h-0 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            size="md"
+            loading={submitting}
+            loadingText="Saving…"
           >
-            {submitting ? "Saving…" : "Save content"}
-          </button>
+            Save content
+          </Button>
         </div>
       </form>
     </div>

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.js";
 import { apiFetch, ApiError } from "../lib/api.js";
-import { formatDate, formatEntityShort } from "../lib/format.js";
+import { formatDate, formatEntityShort, plural } from "../lib/format.js";
+import { Button } from "../components/Button.js";
 
 interface AuditEvent {
   id: string;
@@ -151,7 +152,7 @@ export function AuditPage() {
         const codesStr = Array.isArray(payload.codes) && payload.codes.length > 0
           ? `: ${payload.codes.join(", ")}`
           : "";
-        return `Imported ${count} rules${codesStr}`;
+        return `Imported ${plural(count, "rule")}${codesStr}`;
       }
       case "auth.demo_login":
         return payload.role ? `Role: ${payload.role}` : "Demo login";
@@ -169,7 +170,7 @@ export function AuditPage() {
       }
       case "review.run": {
         const parts: string[] = [];
-        if (payload.findings_count !== undefined) parts.push(`${payload.findings_count} finding(s)`);
+        if (payload.findings_count !== undefined) parts.push(plural(payload.findings_count, "finding"));
         if (payload.ai_status) parts.push(`AI: ${payload.ai_status}`);
         return parts.length ? parts.join(" · ") : "Ran review";
       }
@@ -355,14 +356,17 @@ export function AuditPage() {
 
         {nextCursor && (
           <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="md"
               disabled={loadingMore}
+              loading={loadingMore}
+              loadingText="Loading more…"
               onClick={handleLoadMore}
-              className="px-4 py-2 min-h-11 md:min-h-0 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 shadow-sm transition cursor-pointer disabled:opacity-50"
             >
-              {loadingMore ? "Loading more…" : "Load more"}
-            </button>
+              Load more
+            </Button>
           </div>
         )}
       </div>

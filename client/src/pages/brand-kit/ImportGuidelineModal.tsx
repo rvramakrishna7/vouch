@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
 import { DEMO_GUIDELINE_TEXT } from "../../data/demoGuideline.js";
+import { Button } from "../../components/Button.js";
+import { plural } from "../../lib/format.js";
 
 export interface GuidelineDraft {
   temp_id: string;
@@ -34,6 +36,41 @@ interface ImportGuidelineModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplied: (count: number) => void;
+}
+
+function AutoGrowingTextarea({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: string;
+  onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = "auto";
+      ref.current.style.height = `${Math.max(ref.current.scrollHeight, 64)}px`;
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => {
+        onChange(e);
+        if (ref.current) {
+          ref.current.style.height = "auto";
+          ref.current.style.height = `${Math.max(ref.current.scrollHeight, 64)}px`;
+        }
+      }}
+      rows={2}
+      className={className}
+    />
+  );
 }
 
 export function ImportGuidelineModal({
@@ -354,28 +391,32 @@ export function ImportGuidelineModal({
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-slate-50/50 shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <span>Import rules from guideline</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5">
+              <h2 className="text-lg font-bold text-slate-900">
+                Import rules from guideline
+              </h2>
               {step === "review" && (
-                <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">
+                <span className="text-xs font-semibold px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full whitespace-nowrap w-fit">
                   Review and approve
                 </span>
               )}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
               {step === "input"
                 ? "Paste your brand guideline or upload a DOCX document. AI will extract discrete governing rules."
                 : "Review and edit AI-drafted rules. Deselect duplicates or rules you do not wish to adopt."}
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-2 min-h-0 h-9 w-9 !px-0"
             title="Close"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {/* Content Body */}
@@ -393,14 +434,16 @@ export function ImportGuidelineModal({
                   Guideline Document Text
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={handleUseSample}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                    className="text-blue-600 hover:text-blue-800 bg-blue-50/50 hover:bg-blue-100 border-blue-200"
                   >
                     Use sample guideline
-                  </button>
-                  <label className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 min-h-10 sm:min-h-0 rounded-lg transition cursor-pointer border border-slate-300 inline-flex items-center gap-1.5">
+                  </Button>
+                  <label className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 min-h-[40px] rounded-lg transition cursor-pointer border border-slate-300 inline-flex items-center gap-1.5 select-none">
                     <span>Upload DOCX</span>
                     <input
                       ref={fileInputRef}
@@ -425,21 +468,17 @@ export function ImportGuidelineModal({
 
               <div className="flex items-center justify-between gap-3 text-xs text-slate-500 sticky bottom-0 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-0 bg-white border-t border-slate-200 sm:border-0">
                 <span>{guidelineText.length} characters (min 50)</span>
-                <button
+                <Button
                   type="button"
+                  variant="primary"
+                  size="md"
                   disabled={isDrafting || guidelineText.trim().length < 50}
+                  loading={isDrafting}
+                  loadingText={draftingStep}
                   onClick={handleDraftRules}
-                  className="h-10 px-5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer inline-flex items-center gap-2"
                 >
-                  {isDrafting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>{draftingStep}</span>
-                    </>
-                  ) : (
-                    <span>Draft rules</span>
-                  )}
-                </button>
+                  Draft rules
+                </Button>
               </div>
             </div>
           ) : (
@@ -454,7 +493,7 @@ export function ImportGuidelineModal({
               <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-900">
-                    {drafts.length} rules drafted
+                    {plural(drafts.length, "rule drafted", "rules drafted")}
                   </span>
                   {rejectedCount > 0 && (
                     <span className="text-slate-500">
@@ -467,13 +506,15 @@ export function ImportGuidelineModal({
                     AI: {aiInfo.provider} ({aiInfo.model}) · {(aiInfo.latency_ms / 1000).toFixed(1)}s
                   </span>
                 )}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setStep("input")}
-                  className="text-blue-600 hover:text-blue-800 font-semibold underline cursor-pointer ml-auto"
+                  className="text-blue-600 hover:text-blue-800 ml-auto min-h-0 py-1"
                 >
                   Edit source text
-                </button>
+                </Button>
               </div>
 
               {/* Draft Cards List */}
@@ -511,54 +552,55 @@ export function ImportGuidelineModal({
                           </span>
                         </label>
 
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="w-full sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2">
                           {isDup && (
                             <span
                               title={dupTooltip}
-                              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md cursor-help"
+                              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-md cursor-help whitespace-nowrap"
                             >
                               ⚠ Possible duplicate of {draft.duplicate_of}
                             </span>
                           )}
 
-                          <select
-                            value={draft.category}
-                            onChange={(e) =>
-                              updateDraft(draft.temp_id, {
-                                category: e.target.value as GuidelineDraft["category"],
-                              })
-                            }
-                            className="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                          >
-                            <option value="claims">claims</option>
-                            <option value="tone">tone</option>
-                            <option value="terminology">terminology</option>
-                            <option value="accessibility">accessibility</option>
-                          </select>
+                          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                            <select
+                              value={draft.category}
+                              onChange={(e) =>
+                                updateDraft(draft.temp_id, {
+                                  category: e.target.value as GuidelineDraft["category"],
+                                })
+                              }
+                              className="w-full sm:w-auto text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-900 min-h-[40px] sm:min-h-0"
+                            >
+                              <option value="claims">claims</option>
+                              <option value="tone">tone</option>
+                              <option value="terminology">terminology</option>
+                              <option value="accessibility">accessibility</option>
+                            </select>
 
-                          <select
-                            value={draft.severity}
-                            onChange={(e) =>
-                              updateDraft(draft.temp_id, {
-                                severity: e.target.value as GuidelineDraft["severity"],
-                              })
-                            }
-                            className="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                          >
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                          </select>
+                            <select
+                              value={draft.severity}
+                              onChange={(e) =>
+                                updateDraft(draft.temp_id, {
+                                  severity: e.target.value as GuidelineDraft["severity"],
+                                })
+                              }
+                              className="w-full sm:w-auto text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-900 min-h-[40px] sm:min-h-0"
+                            >
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Rule Text (Editable) */}
+                      {/* Rule Text (Editable with auto-growing textarea) */}
                       <div className="space-y-1.5 mb-3">
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                           Rule Statement (Editable)
                         </label>
-                        <textarea
-                          rows={2}
+                        <AutoGrowingTextarea
                           value={draft.text}
                           onChange={(e) =>
                             updateDraft(draft.temp_id, { text: e.target.value })
@@ -589,25 +631,30 @@ export function ImportGuidelineModal({
         {step === "review" && (
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 shrink-0">
             <span className="text-sm font-semibold text-slate-700">
-              {selectedIds.size} selected of {drafts.length} rules
+              {selectedIds.size} selected of {plural(drafts.length, "rule")}
             </span>
             <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="md"
                 onClick={() => setStep("input")}
                 disabled={isApplying}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
               >
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 disabled={isApplying || selectedIds.size === 0}
+                loading={isApplying}
+                loadingText="Adding…"
                 onClick={handleApplyRules}
-                className="h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer inline-flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 border-blue-600"
               >
-                {isApplying ? "Adding rules…" : `Add ${selectedIds.size} rules`}
-              </button>
+                {selectedIds.size > 0 ? `Add ${plural(selectedIds.size, "rule")}` : "Add rules"}
+              </Button>
             </div>
           </div>
         )}

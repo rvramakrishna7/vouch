@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../../lib/api.js";
 import { ImportGuidelineModal } from "./ImportGuidelineModal.js";
+import { Button } from "../../components/Button.js";
+import { plural } from "../../lib/format.js";
 
 export interface Rule {
   id: string;
@@ -166,20 +168,22 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
         </p>
         {isBrandManager && (
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setShowImportModal(true)}
-              className="text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
             >
               Import from guideline
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
             >
               {showAddForm ? "Cancel" : "+ Add rule"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -239,20 +243,24 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowAddForm(false)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={submittingAdd}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              loading={submittingAdd}
+              loadingText="Saving…"
             >
-              {submittingAdd ? "Saving…" : "Save Rule"}
-            </button>
+              Save Rule
+            </Button>
           </div>
         </form>
       )}
@@ -264,13 +272,15 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
             <h3 className="text-sm font-bold text-slate-900">
               Editing Rule: <span className="font-mono text-blue-700">{editingRule.code}</span> (v{editingRule.version})
             </h3>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingRule(null)}
-              className="text-xs text-slate-500 hover:text-slate-800"
+              className="min-h-0 py-1 text-slate-500 hover:text-slate-800"
             >
               Close
-            </button>
+            </Button>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">Severity</label>
@@ -298,20 +308,24 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
             </p>
           </div>
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setEditingRule(null)}
-              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={submittingEdit}
-              className="px-4 py-1.5 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md disabled:opacity-50"
+              loading={submittingEdit}
+              loadingText="Updating…"
             >
-              {submittingEdit ? "Updating…" : "Update Rule"}
-            </button>
+              Update Rule
+            </Button>
           </div>
         </form>
       )}
@@ -367,21 +381,25 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
                     </td>
                     {isBrandManager && (
                       <td data-label="Actions" className="px-4 py-3 text-right whitespace-nowrap space-x-2">
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleStartEdit(rule)}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                          className="min-h-0 py-1 text-blue-600 hover:text-blue-800"
                         >
                           Edit
-                        </button>
+                        </Button>
                         {rule.status !== "archived" && (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleArchive(rule)}
-                            className="text-xs font-medium text-slate-500 hover:text-slate-800"
+                            className="min-h-0 py-1 text-slate-500 hover:text-slate-800"
                           >
                             Archive
-                          </button>
+                          </Button>
                         )}
                       </td>
                     )}
@@ -396,7 +414,7 @@ export function RulesTab({ isBrandManager }: { isBrandManager: boolean }) {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onApplied={(count) => {
-          setSuccess(`Successfully imported ${count} rule(s) into Brand Kit.`);
+          setSuccess(`Successfully imported ${plural(count, "rule")} into Brand Kit.`);
           void fetchRules();
         }}
       />
