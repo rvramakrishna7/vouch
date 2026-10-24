@@ -344,6 +344,20 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
       - Captured 22 comprehensive dark screenshots at 1280px and 375px covering content detail with in-text highlights, preview diff modal, stale review notice, reviewer override dialog, audit log, brand kit facts with expired fact, and standard views.
       - Zero regressions: 12/12 existing client E2E tests passed; 98/98 server unit and integration tests passed; client and server production builds succeeded.
 
+  - Live acceptance suite (S12b):
+    - End-to-end automated live verification (`client/e2e/live-acceptance.spec.ts`) without mocks against production deployments (`https://vouch-app-beta.vercel.app` and `https://vouch-ten-iota.vercel.app`):
+      - TEST-001: Verified one-click demo logins for Brand Manager (Priya Sharma), Creator (Arjun Mehta), and Reviewer (Neha Iyer); role-specific navigation links verified.
+      - TEST-002: Brand Manager governance: dynamically creates, edits, and archives `LIVE-TEST` rule; adds and edits `LIVE-TEST` fact (source, expiry); creates, edits, and deletes `LIVE-TEST` term.
+      - TEST-003: Creator submits real `.docx` binary extraction (`docs/fixtures/vouch-test-caption.docx`) with campaign purpose, target audience, and Instagram channel.
+      - TEST-004 & TEST-005: Real AI review with Groq and rule checks on worked example text; verified findings for CLAIM-01, CLAIM-02, F-03 (outdated), F-15 (contradicted), ACC-02 (#stayhydrated), and AI engine disclosure.
+      - TEST-006: Creator accepts fix on contradicted claim, dismisses finding with mandatory >= 5 character reason validation, inspects word-level diff modal (`Preview changes →`), applies fixes into Revision 2, observes stale review warning banner, and triggers re-review.
+      - TEST-007: Review lifecycle: Creator submits for review; Reviewer requests changes with comment; Creator creates Revision 3 via manual editor, runs review, and resubmits; Reviewer approves (with override reason when needed); verified content transitions to Approved and is locked against further editing.
+      - TEST-008: Verified activity timeline on Content Detail (`Created content`, `Ran Vouch review`, `Submitted for review`, `Approved`) and full audit log on `/audit`.
+      - TEST-011: Verified tenant isolation: unauthenticated requests to protected endpoints return 401 Unauthorized.
+      - Responsive Dual-Theme verification: Executed mobile 375px dark theme pass on Content Detail, Audit Log, and Brand Kit; verified clean text (`assertCleanText`), zero horizontal layout overflow (`scrollWidth <= clientWidth`), and captured 26 live screenshots in `client/e2e/screenshots/`.
+    - Executed two consecutive live acceptance runs (`npm run test:live --prefix client`): both passed 100% on the live deployed production environment.
+    - Full mock E2E suite (`npm run test:e2e --prefix client`) passing 15/15; server suite (`npm test --prefix server`) passing 99/99.
+
 Verified row counts:
 - schema_migrations: 4
 - organizations: 2
@@ -378,11 +392,11 @@ Verified row counts:
 | S12c | Responsive design (phone, tablet, desktop) | 24 Oct | Done: S12c (responsive layouts, e2e suite 7/7, zero regressions across existing suites 5/5) |
 | S12d | App-wide polish, speed breakdown & design system | 24 Oct | Done: S12d (Server-Timing breakdown, keep-warm, shared Button, single Run review control, plural helper, 98 server tests & 12 e2e passed) |
 | S12e | Cold-start fix, guideline speed & dark mode | 24 Oct | Done: S12e & S12e.1 (cold-start 931ms live pass after 20m idle, realistic theme mocks, dark badge tokens, 0 contrast violations, 22 dark screenshots) |
-| S12 | End-to-end pass of TEST-001..011 on live link; fixes | 24 Oct | Next |
+| S12b | Live acceptance run (no mocks) of TEST-001..011 + fixes | 24 Oct | Done: live e2e suite with real AI passed 2 consecutive runs on live deployment, 26 screenshots captured |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S12: End-to-end pass of TEST-001..011 on live link; fixes.
+S13: README, updated PDF, feature list, changes, 3 improvements; final reseed and submit.
 
 ## Open issues
 none
