@@ -8,33 +8,49 @@ test("Measure live user flow (3 runs in fresh contexts)", async ({ browser }) =>
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    const requests: Array<{
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Network.enable");
+
+    const requests = new Map<string, {
+      requestId: string;
       method: string;
       url: string;
       status?: number;
-      start: number;
+      startTime: number;
       duration?: number;
       serverTiming?: string;
-    }> = [];
+    }>();
 
-    page.on("request", (req) => {
-      requests.push({
-        method: req.method(),
-        url: req.url(),
-        start: performance.now(),
+    cdp.on("Network.requestWillBeSent", (event) => {
+      requests.set(event.requestId, {
+        requestId: event.requestId,
+        method: event.request.method,
+        url: event.request.url,
+        startTime: performance.now(),
       });
     });
 
-    page.on("response", (res) => {
-      const match = requests.find(
-        (r) => r.url === res.url() && r.method === res.request().method() && r.duration === undefined,
-      );
-      if (match) {
-        match.duration = performance.now() - match.start;
-        match.status = res.status();
-        match.serverTiming = res.headers()["server-timing"] || "-";
+    cdp.on("Network.responseReceived", (event) => {
+      const req = requests.get(event.requestId);
+      if (req) {
+        req.status = event.response.status;
+        const timingHeader = event.response.headers["server-timing"] || event.response.headers["Server-Timing"];
+        req.serverTiming = timingHeader || "-";
+      }
+      if (event.response.url.includes("/api/")) {
+        console.log(`[API Response] ${event.response.status} ${event.response.url}`);
       }
     });
+
+    cdp.on("Network.loadingFinished", (event) => {
+      const req = requests.get(event.requestId);
+      if (req) {
+        req.duration = performance.now() - req.startTime;
+      }
+    });
+
+    page.on("console", (msg) => console.log(`[Browser console] ${msg.type()}: ${msg.text()}`));
+    page.on("requestfailed", (req) => console.log(`[Request failed] ${req.method()} ${req.url()}: ${req.failure()?.errorText}`));
 
     console.log(`[Run ${run}] Navigating to https://vouch-app-beta.vercel.app/login ...`);
     await page.goto("https://vouch-app-beta.vercel.app/login", { waitUntil: "networkidle" });
@@ -52,7 +68,7 @@ test("Measure live user flow (3 runs in fresh contexts)", async ({ browser }) =>
 
     console.log(`\n[Run ${run}] Click -> Content list fully shown: ${contentListTime.toFixed(0)} ms`);
     console.log(`[Run ${run}] Network Requests during flow:`);
-    for (const r of requests) {
+    for (const r of requests.values()) {
       if (r.url.includes("/api/")) {
         const urlObj = new URL(r.url);
         const relUrl = urlObj.pathname + urlObj.search;

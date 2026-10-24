@@ -111,6 +111,20 @@ html.dark .bg-red-100.text-red-800 {
   border-color: #b91c1c;
 }
 
+html.dark .bg-rose-100.text-rose-800 {
+  background-color: #881337;
+  color: #fecdd3;
+  border-color: #be123c;
+}
+
+html.dark .bg-slate-100.text-slate-800,
+html.dark .bg-slate-100.text-slate-700,
+html.dark .bg-slate-100.text-slate-600 {
+  background-color: #1e293b;
+  color: #cbd5e1;
+  border-color: #334155;
+}
+
 html.dark .bg-purple-100.text-purple-800 {
   background-color: #581c87;
   color: #e9d5ff;
@@ -143,6 +157,12 @@ html.dark .bg-red-100.text-red-950 {
   text-decoration-color: #f87171;
 }
 
+html.dark .bg-rose-100.text-rose-950 {
+  background-color: rgba(136, 19, 55, 0.45);
+  color: #fecdd3;
+  text-decoration-color: #fb7185;
+}
+
 html.dark .bg-purple-100.text-purple-950 {
   background-color: rgba(88, 28, 135, 0.45);
   color: #e9d5ff;
@@ -168,6 +188,12 @@ html.dark .bg-red-50 {
   color: #fecaca;
 }
 
+html.dark .bg-rose-50 {
+  background-color: rgba(136, 19, 55, 0.25);
+  border-color: #9f1239;
+  color: #fecdd3;
+}
+
 html.dark .bg-blue-50 {
   background-color: rgba(30, 58, 138, 0.25);
   border-color: #1e40af;
@@ -176,15 +202,19 @@ html.dark .bg-blue-50 {
 
 /* Diff highlights */
 html.dark ins,
+html.dark .bg-emerald-100.text-emerald-950,
 html.dark .bg-green-100 {
   background-color: rgba(6, 78, 59, 0.5);
   color: #a7f3d0;
+  border-color: #047857;
 }
 
 html.dark del,
+html.dark .bg-rose-100.text-rose-950,
 html.dark .bg-red-100 {
-  background-color: rgba(127, 29, 29, 0.5);
-  color: #fecaca;
+  background-color: rgba(136, 19, 55, 0.5);
+  color: #fecdd3;
+  border-color: #be123c;
 }
 
 /*
