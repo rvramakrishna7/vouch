@@ -476,6 +476,13 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
       page.locator("text=Submitted for review. Waiting for a reviewer."),
     ).toBeVisible();
 
+    // S13a: Verify Draft Body text, Revision badge, Revision history, and AI disclosure remain visible after submit
+    await expect(page.locator("text=India's No.1 eco-friendly water bottle")).toBeVisible();
+    await expect(page.locator("text=Revision 1").first()).toBeVisible();
+    await expect(page.locator("text=Revision History")).toBeVisible();
+    await expect(page.locator("text=Reviewed by:")).toContainText("vouch-rules-v1");
+    await expect(page.locator("text=Reviewed by:")).toContainText("groq");
+
     // S10c: Creator in review has NO editing / resolving / submitting buttons
     await expect(page.locator("button:has-text('Submit for review')")).toHaveCount(0);
     await expect(page.locator("button:has-text('Run Vouch review')")).toHaveCount(0);
@@ -549,6 +556,13 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
     await expect(page.locator("text=Changes requested by Neha Iyer")).toBeVisible();
     await expect(page.locator(`text="${LONG_COMMENT}"`)).toBeVisible();
 
+    // S13a: Verify Draft Body text, Revision badge, Revision history, and AI disclosure remain visible after request_changes
+    await expect(page.locator("text=India's No.1 eco-friendly water bottle")).toBeVisible();
+    await expect(page.locator("text=Revision 1").first()).toBeVisible();
+    await expect(page.locator("text=Revision History")).toBeVisible();
+    await expect(page.locator("text=Reviewed by:")).toContainText("vouch-rules-v1");
+    await expect(page.locator("text=Reviewed by:")).toContainText("groq");
+
     await assertCleanText(page);
     await page.screenshot({
       path: path.join(screenshotsDir, "s10b_step4_reviewer_requested_changes.png"),
@@ -592,6 +606,13 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
       page.locator(`text=(Override: ${LONG_OVERRIDE})`),
     ).toBeVisible();
 
+    // S13a: Verify Draft Body text, Revision badge, Revision history, and AI disclosure remain visible after approve
+    await expect(page.locator("text=India's No.1 eco-friendly water bottle")).toBeVisible();
+    await expect(page.locator("text=Revision 1").first()).toBeVisible();
+    await expect(page.locator("text=Revision History")).toBeVisible();
+    await expect(page.locator("text=Reviewed by:")).toContainText("vouch-rules-v1");
+    await expect(page.locator("text=Reviewed by:")).toContainText("groq");
+
     // Ensure all action buttons are hidden when approved
     await expect(page.locator("button:has-text('Run Vouch review')")).toHaveCount(0);
     await expect(page.locator("button:has-text('Submit for review')")).toHaveCount(0);
@@ -633,6 +654,9 @@ test.describe("Approval workflow UI, Activity timeline, and Audit log (S10c) E2E
     await auditLink.click();
 
     await page.waitForSelector("h1:has-text('Audit log')");
+
+    // S13a: Verify active nav item "Audit log" has active styles matching other active items (bg-slate-900 text-white)
+    await expect(auditLink).toHaveClass(/bg-slate-900.*text-white/);
     await expect(
       page.locator("text=Append-only system record of all governance events and decisions."),
     ).toBeVisible();

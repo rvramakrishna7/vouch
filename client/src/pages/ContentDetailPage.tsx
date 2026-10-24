@@ -613,7 +613,7 @@ export function ContentDetailPage() {
         `/api/contents/${id}/submit`,
         { method: "POST" },
       );
-      setContent(res.content);
+      setContent((prev) => (prev ? { ...prev, ...res.content } : res.content));
       setSubmitting(false);
       void fetchActivity();
     } catch (err) {
@@ -645,7 +645,7 @@ export function ContentDetailPage() {
           }),
         },
       );
-      setContent(res.content);
+      setContent((prev) => (prev ? { ...prev, ...res.content } : res.content));
       setRequestChangesComment("");
       setRequestChangesOpen(false);
       setRequestingChanges(false);
@@ -677,7 +677,7 @@ export function ContentDetailPage() {
           body: JSON.stringify(body),
         },
       );
-      setContent(res.content);
+      setContent((prev) => (prev ? { ...prev, ...res.content } : res.content));
       if (res.approval) {
         setLatestApproval({
           user_name: user?.name || "Reviewer",
@@ -1501,7 +1501,7 @@ export function ContentDetailPage() {
             <div className="h-5 w-28 bg-slate-200 rounded animate-pulse" />
           ) : (
             <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-              {content?.created_by_name || "Arjun Mehta"}
+              {content?.created_by_name || "Unknown author"}
             </span>
           )}
         </div>
@@ -1656,7 +1656,7 @@ export function ContentDetailPage() {
 
               <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span>
-                  Author: {latestRevision?.created_by_name || content?.created_by_name || "Arjun Mehta"}
+                  Author: {latestRevision?.created_by_name || content?.created_by_name || "Unknown author"}
                 </span>
                 {findings.length > 0 && isLatestReview && (
                   <span className="italic text-slate-600 dark:text-slate-400">
@@ -1724,7 +1724,7 @@ export function ContentDetailPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500">
-                          <span>{rev.created_by_name || content?.created_by_name || "Arjun Mehta"}</span>
+                          <span>{rev.created_by_name || content?.created_by_name || "Unknown author"}</span>
                           <span>•</span>
                           <span>{formatDate(rev.created_at)}</span>
                           <span

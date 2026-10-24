@@ -655,6 +655,14 @@ test.describe("Responsive layout (S12c, AGENTS.md 7f)", () => {
       await shot(page, "login", width);
     }
 
+    // 6b. Verify login animated dot settles on brand green (#059669 / rgb(5, 150, 105))
+    const dot = page.locator("[data-testid='login-dot']");
+    await expect(dot).toBeVisible();
+    await page.waitForTimeout(1600); // wait for 1.5s animation to finish
+    const dotColor = await dot.evaluate((el) => window.getComputedStyle(el).color);
+    // rgb(5, 150, 105) is emerald-600
+    expect(dotColor).toBe("rgb(5, 150, 105)");
+
     // click on a button triggers its pending label within 100 ms (Requirement 11)
     await page.route(`${API}/api/auth/demo`, async (route) => {
       await new Promise((r) => setTimeout(r, 400));

@@ -20,6 +20,47 @@ import { timingStorage } from "../middleware/timing.js";
 
 export const contentsRouter = Router();
 
+export async function fetchContentWithRevisions(contentId: string, orgId: string, clientOrPool: any = pool) {
+  const { rows } = await clientOrPool.query(
+    `SELECT 
+       c.id,
+       c.organization_id,
+       c.title,
+       c.purpose,
+       c.audience,
+       c.channel,
+       c.status,
+       c.created_by,
+       COALESCE(u.name, '') AS created_by_name,
+       c.created_at,
+       c.updated_at,
+       COALESCE(
+         (
+           SELECT json_agg(
+             json_build_object(
+               'id', r.id,
+               'n', r.n,
+               'body', r.body,
+               'created_by', r.created_by,
+               'created_by_name', COALESCE(ru.name, ''),
+               'created_at', r.created_at
+             ) ORDER BY r.n DESC
+           )
+           FROM revisions r
+           LEFT JOIN users ru ON r.created_by = ru.id
+           WHERE r.content_id = c.id AND r.organization_id = c.organization_id
+         ),
+         '[]'::json
+       ) AS revisions
+     FROM contents c
+     LEFT JOIN users u ON c.created_by = u.id
+     WHERE c.id = $1 AND c.organization_id = $2`,
+    [contentId, orgId],
+  );
+  return rows[0] || null;
+}
+
+
 // Apply requireAuth to all contents routes
 contentsRouter.use(requireAuth);
 
@@ -244,7 +285,11 @@ contentsRouter.get("/:id/reviews/latest", async (req: Request, res: Response) =>
              'model', rw.model,
              'started_at', rw.started_at,
              'finished_at', rw.finished_at,
-             'created_at', rw.created_at
+             'created_at', rw.created_at,
+             'ai_status', rw.ai_status,
+             'ai_provider', rw.ai_provider,
+             'ai_model', rw.ai_model,
+             'ai_latency_ms', rw.ai_latency_ms
            )
            FROM revisions rv
            JOIN reviews rw ON rw.revision_id = rv.id
@@ -975,7 +1020,8 @@ contentsRouter.post("/:id/submit", async (req: Request, res: Response) => {
       });
 
       await client.query("COMMIT");
-      return res.json({ content: updatedRows[0] });
+      const fullContent = await fetchContentWithRevisions(id, orgId);
+      return res.json({ content: fullContent || updatedRows[0] });
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;
@@ -1149,8 +1195,9 @@ contentsRouter.post("/:id/decision", async (req: Request, res: Response) => {
       });
 
       await client.query("COMMIT");
+      const fullContent = await fetchContentWithRevisions(id, orgId);
       return res.json({
-        content: updatedContentRows[0],
+        content: fullContent || updatedContentRows[0],
         approval: approvalRows[0],
       });
     } catch (err) {
