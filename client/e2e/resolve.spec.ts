@@ -81,6 +81,18 @@ async function assertCleanText(page: Page) {
       `Page text should not contain placeholder/broken string "${label}". Text sample: ${text.slice(0, 300)}...`,
     ).toBe(false);
   }
+
+  // S13b assertion: Assert no card contains "null" or repeated duplicate sentence
+  const cards = page.locator(".rounded-xl, .rounded-lg");
+  const count = await cards.count();
+  for (let i = 0; i < count; i++) {
+    const cardText = await cards.nth(i).innerText();
+    expect(cardText).not.toContain("Guidance: null");
+    expect(cardText).not.toContain("Guidance: undefined");
+    expect(cardText).not.toContain(
+      "Allowed only with a specific supporting fact: Allowed only with a specific supporting fact",
+    );
+  }
 }
 
 test.describe("Resolve findings (TEST-006) E2E Scenario", () => {

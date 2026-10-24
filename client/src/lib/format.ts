@@ -42,3 +42,13 @@ export function formatEntityShort(entity?: string | null): { short: string; full
   }
   return { short: entity.length > 16 ? entity.slice(0, 16) : entity, full: entity };
 }
+
+/**
+ * Strips trailing "Guidance: null" / "Guidance: undefined" from finding reasons.
+ */
+export function cleanReason(reason?: string | null): string {
+  if (!reason) return "";
+  return reason
+    .replace(/\s*Guidance:\s*(null|undefined)\b\.?/gi, "")
+    .trim();
+}
