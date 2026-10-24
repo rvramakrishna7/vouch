@@ -72,7 +72,7 @@ server/  Express 5 + TypeScript (one Vercel Function, region bom1 / Mumbai)
 db/migrations/*.sql → Supabase Postgres + pgvector (Mumbai)
 ```
 
-**AI providers (free tiers):** Groq `openai/gpt-oss-120b` (primary for the Claim Ledger, temperature 0), Google Gemini `gemini-3.5-flash-lite` (fallback with timeout; primary for guideline drafting), Gemini `gemini-embedding-001` (768-dim embeddings). Provider failures (429/5xx/timeouts) fall back automatically.
+**AI providers (free tiers):** Groq `openai/gpt-oss-120b` (primary for the Claim Ledger and guideline drafting, temperature 0), Google Gemini `gemini-3.5-flash-lite` (automatic fallback with timeout), Gemini `gemini-embedding-001` (768-dim embeddings for retrieval and duplicate detection). Provider failures (429/5xx/timeouts) fall back automatically.
 
 **Performance (measured on the live deployment):** one-click login to the content list in under 1 s, a full review in about 1.5-4 s, guideline drafting in about 5 s. `Server-Timing` headers break every request down into auth / db / ai / embed; a scheduled ping keeps the serverless function warm.
 
