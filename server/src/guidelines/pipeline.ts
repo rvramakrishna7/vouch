@@ -508,17 +508,17 @@ For each extracted rule:
       }
 
       // Dual criteria:
-      // 1. If LLM proposed duplicate, accept ONLY if cosine similarity >= 0.70
+      // 1. If LLM proposed duplicate, accept if cosine similarity >= 0.65
       let finalDuplicate: string | null = null;
-      if (proposedCode && proposedSim >= 0.70) {
+      if (proposedCode && proposedSim >= 0.65) {
         finalDuplicate = proposedCode;
       }
 
-      // 2. Fallback: if any rule in the same category has cosine similarity >= 0.74 (or any category >= 0.85), mark as duplicate
+      // 2. Fallback: if any rule in the same category has cosine similarity >= 0.68 (or any category >= 0.85), mark as duplicate
       if (highestCode) {
         const draftPrefix = CATEGORY_PREFIXES[draft.category];
         const isSameCategory = highestCode.startsWith(`${draftPrefix}-`);
-        if ((isSameCategory && highestSim >= 0.74) || highestSim >= 0.85) {
+        if ((isSameCategory && highestSim >= 0.68) || highestSim >= 0.85) {
           finalDuplicate = highestCode;
         }
       }
