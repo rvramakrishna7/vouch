@@ -21,8 +21,14 @@ export type RuleCategory = (typeof ALLOWED_CATEGORIES)[number];
 export type RuleSeverity = (typeof ALLOWED_SEVERITIES)[number];
 
 export const aiRuleDraftItemSchema = z.object({
-  category: z.enum(ALLOWED_CATEGORIES),
-  severity: z.enum(ALLOWED_SEVERITIES),
+  category: z.preprocess(
+    (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
+    z.enum(ALLOWED_CATEGORIES),
+  ),
+  severity: z.preprocess(
+    (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
+    z.enum(ALLOWED_SEVERITIES),
+  ),
   text: z.string().min(1),
   source_quote: z.string().min(1),
   duplicate_of: z.string().nullable().optional(),
@@ -204,7 +210,10 @@ CRITICAL INVARIANTS:
    - "low": minor stylistic preference, polish suggestion, or formatting guideline.
 5. DUPLICATE DETECTION:
    You will receive the organization's existing active rules list. If an extracted rule covers the same core brand restriction or requirement as an existing rule (e.g., prohibition of unverified superlatives, substantiating numbers/durations, trademark spelling/capitalization), set "duplicate_of" to that existing rule's exact code. Otherwise, set "duplicate_of" to null.
-6. Return JSON ONLY matching the requested schema.`;
+6. JSON FORMAT:
+   Return JSON ONLY with the root structure: {"rules": [...]}.
+   Values for "category" MUST be strictly one of: "claims", "tone", "terminology", "accessibility" (all lowercase).
+   Values for "severity" MUST be strictly one of: "high", "medium", "low" (all lowercase).`;
 
 /**
  * Runs the AI rule draft extraction pipeline, code validation, code assignment, and duplicate detection.

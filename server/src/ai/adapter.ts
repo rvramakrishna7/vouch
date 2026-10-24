@@ -167,9 +167,11 @@ async function callGroqRaw(
       ],
       response_format: { type: "json_object" },
       ...(typeof temperature === "number" ? { temperature } : {}),
-      ...(process.env.GROQ_REASONING_EFFORT
-        ? { reasoning_effort: process.env.GROQ_REASONING_EFFORT }
-        : {}),
+      ...(model === "openai/gpt-oss-120b"
+        ? { reasoning_effort: process.env.GROQ_REASONING_EFFORT || "low" }
+        : process.env.GROQ_REASONING_EFFORT
+          ? { reasoning_effort: process.env.GROQ_REASONING_EFFORT }
+          : {}),
     }),
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -235,6 +237,14 @@ function parseAndValidate<T>(
       ],
       rawError: `Invalid JSON syntax: ${err.message}`,
     };
+  }
+
+  // Handle case where model returned an array but schema expects an object with a 'rules' array
+  if (Array.isArray(parsed)) {
+    const wrappedResult = schema.safeParse({ rules: parsed });
+    if (wrappedResult.success) {
+      return { success: true, data: wrappedResult.data };
+    }
   }
 
   const result = schema.safeParse(parsed);
