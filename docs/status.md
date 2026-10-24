@@ -366,6 +366,7 @@ Approval workflow UI, Activity timeline, and Audit log (S10b & S10b.1) completed
     - Full mock E2E suite (`npm run test:e2e --prefix client`) passing 14/14 (`measure_live_flow.spec.ts` moved to live project); server suite (`npm test --prefix server`) passing 100/100 (including demo org schema validation).
 
 Verified row counts:
+- Final reseed done at 2026-10-24 19:43 IST. No server or live tests against this database from now on.
 - schema_migrations: 4
 - organizations: 2
 - users: 4
@@ -374,11 +375,11 @@ Verified row counts:
 - terms: 9
 - contents: 2
 - revisions: 2
-- reviews: 2 (base seed review + live Claim Ledger review)
-- findings: 11
+- reviews: 0
+- findings: 0
 - comments: 0
 - approvals: 0
-- audit_events: 4
+- audit_events: 1
 
 ## Steps
 | Step | Name | Target | Status |
@@ -400,10 +401,11 @@ Verified row counts:
 | S12d | App-wide polish, speed breakdown & design system | 24 Oct | Done: S12d (Server-Timing breakdown, keep-warm, shared Button, single Run review control, plural helper, 98 server tests & 12 e2e passed) |
 | S12e | Cold-start fix, guideline speed & dark mode | 24 Oct | Done: S12e & S12e.1 (cold-start 931ms live pass after 20m idle, realistic theme mocks, dark badge tokens, 0 contrast violations, 22 dark screenshots) |
 | S12b | Live acceptance run (no mocks) of TEST-001..011 + fixes | 24 Oct | Done: live e2e suite with real AI passed 3 consecutive runs on live deployment, 26 screenshots captured |
+| S13a | Critical bug fix, branding polish, final demo database reseed | 24 Oct | Done: fixed empty draft body / missing revision history on submit & decision, Vouch. brand green dot animation, title/favicon, final reseed + embeddings verified |
 | S13 | README, updated PDF, feature list, changes, 3 improvements; submit | 24 night / 25 Oct 09:00 | Pending |
 
 ## Next step
-S13: README, updated PDF, feature list, changes, 3 improvements; final reseed and submit.
+S13: README, updated PDF, feature list, changes, 3 improvements; final submission package.
 
 ## Open issues
 none
