@@ -5,6 +5,7 @@ import {
   type GenerateJsonOptions,
   type GenerateJsonResult,
 } from "./types.js";
+import { timingStorage } from "../middleware/timing.js";
 
 // Documented defaults (Current models verified in live environment)
 // Google Gemini: https://ai.google.dev/gemini-api/docs/models/gemini
@@ -248,6 +249,19 @@ function parseAndValidate<T>(
   return { success: true, data: result.data };
 }
 
+function recordAttempt(provider: string, dur: number, status: string, isRetry?: boolean) {
+  const store = timingStorage.getStore();
+  if (store) {
+    store.aiAttempts = store.aiAttempts || [];
+    if (isRetry) {
+      store.aiAttempts.push(`ai_retry=${provider};dur=${dur.toFixed(1)}`);
+    } else {
+      const tryNum = store.aiAttempts.filter((a) => a.startsWith("ai_try")).length + 1;
+      store.aiAttempts.push(`ai_try${tryNum}=${provider};dur=${dur.toFixed(1)}`);
+    }
+  }
+}
+
 /**
  * Generate structured JSON validated by a Zod schema.
  * Executes Gemini first; falls back to Groq on HTTP 429, 5xx, timeout, or network error.
@@ -261,20 +275,38 @@ async function attemptGemini<T>(
   temperature?: number,
 ): Promise<GenerateJsonResult<T>> {
   const geminiModel = getGeminiModel();
-  let callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs, temperature);
+  const start = performance.now();
+  let callRes;
+  try {
+    callRes = await callGeminiRaw(geminiModel, system, user, timeoutMs, temperature);
+  } catch (err: any) {
+    recordAttempt("gemini", performance.now() - start, "error");
+    throw err;
+  }
   let val = parseAndValidate(callRes.text, schema);
 
   if (!val.success) {
+    recordAttempt("gemini", callRes.latencyMs, "invalid_schema");
+    const retryStart = performance.now();
     const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-    callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs, temperature);
+    try {
+      callRes = await callGeminiRaw(geminiModel, system, retryPrompt, timeoutMs, temperature);
+    } catch (err: any) {
+      recordAttempt("gemini", performance.now() - retryStart, "retry_error", true);
+      throw err;
+    }
     val = parseAndValidate(callRes.text, schema);
 
     if (!val.success) {
+      recordAttempt("gemini", callRes.latencyMs, "retry_invalid_schema", true);
       throw new AiInvalidOutputError(
         `Gemini output failed schema validation after retry: ${val.rawError}`,
         val.issues,
       );
     }
+    recordAttempt("gemini", callRes.latencyMs, "retry_ok", true);
+  } else {
+    recordAttempt("gemini", callRes.latencyMs, "ok");
   }
 
   return {
@@ -293,20 +325,38 @@ async function attemptGroq<T>(
   temperature?: number,
 ): Promise<GenerateJsonResult<T>> {
   const groqModel = getGroqModel();
-  let callRes = await callGroqRaw(groqModel, system, user, timeoutMs, temperature);
+  const start = performance.now();
+  let callRes;
+  try {
+    callRes = await callGroqRaw(groqModel, system, user, timeoutMs, temperature);
+  } catch (err: any) {
+    recordAttempt("groq", performance.now() - start, "error");
+    throw err;
+  }
   let val = parseAndValidate(callRes.text, schema);
 
   if (!val.success) {
+    recordAttempt("groq", callRes.latencyMs, "invalid_schema");
+    const retryStart = performance.now();
     const retryPrompt = `${user}\n\nATTENTION: Your previous output was invalid according to the required schema: ${val.rawError}. Return only valid JSON conforming strictly to the requested schema.`;
-    callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs, temperature);
+    try {
+      callRes = await callGroqRaw(groqModel, system, retryPrompt, timeoutMs, temperature);
+    } catch (err: any) {
+      recordAttempt("groq", performance.now() - retryStart, "retry_error", true);
+      throw err;
+    }
     val = parseAndValidate(callRes.text, schema);
 
     if (!val.success) {
+      recordAttempt("groq", callRes.latencyMs, "retry_invalid_schema", true);
       throw new AiInvalidOutputError(
         `Groq output failed schema validation after retry: ${val.rawError}`,
         val.issues,
       );
     }
+    recordAttempt("groq", callRes.latencyMs, "retry_ok", true);
+  } else {
+    recordAttempt("groq", callRes.latencyMs, "ok");
   }
 
   return {
